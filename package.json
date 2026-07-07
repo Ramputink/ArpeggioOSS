@@ -7,7 +7,8 @@
   "workspaces": [
     "packages/musicxml-parser",
     "packages/omr-client",
-    "packages/practice-engine"
+    "packages/practice-engine",
+    "apps/web"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

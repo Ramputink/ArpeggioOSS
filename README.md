@@ -176,6 +176,49 @@ The Docker path (Debian, linux/amd64) has none of these issues and keeps OCR on.
 | `OMR_DISABLE_OCR` | `false` | Skip Audiveris OCR (set `true` on macOS 11). |
 | `AUDIVERIS_CMD` | (set by Docker/native) | Path to the Audiveris launcher. |
 | `TESSDATA_PREFIX` | (set by Docker/native) | Tesseract language-data dir. |
+| `OMR_STATIC_DIR` | (empty) | Dir of the built web app (`apps/web/dist`), served at `/`. Empty = API only. |
+| `OMR_CORS_ORIGINS` | `*` | Comma-separated allowed API origins (e.g. `http://localhost:5173`). |
+| `OMR_TLS` | `0` | When `1`/`true` and certs exist, serve HTTPS (see below). |
+
+### Web app (serve + HTTPS for microphone)
+
+The OMR backend can also serve the built web app, so backend + frontend ship as
+**one deployable unit**. This also lets the service run over HTTPS, which the
+browser microphone needs: `getUserMedia()` only works in a **secure context**
+(`https://` or `localhost`), so a plain `http://192.168.0.23` page can't record.
+
+**1. Build the web app** (on the dev machine):
+
+```bash
+npm run build -w @arpeggio/web
+```
+
+The bundle lands in `apps/web/dist/`. Copy it to the backend alongside the
+service, e.g. into `~/arpeggio/web`:
+
+```bash
+rsync -avz --delete apps/web/dist/ matveypro@192.168.0.23:~/arpeggio/web/
+```
+
+**2. Point the service at it** with `OMR_STATIC_DIR` (served at `/`). CORS is
+open by default (`OMR_CORS_ORIGINS=*`); when serving the app from the same
+origin you don't need it, but a dev app on `http://localhost:5173` calling the
+API cross-origin does — set `OMR_CORS_ORIGINS=http://localhost:5173`.
+
+**3. Enable HTTPS.** Generate a self-signed cert once (SAN covers
+`192.168.0.23` + `localhost`), then start with `OMR_TLS=1`:
+
+```bash
+ssh matveypro@192.168.0.23 'cd ~/arpeggio/omr && bash scripts/make-cert.sh'
+# certs land in ~/arpeggio/certs/{key.pem,cert.pem}
+ssh matveypro@192.168.0.23 'cd ~/arpeggio/omr && \
+  OMR_STATIC_DIR=~/arpeggio/web OMR_TLS=1 nohup bash scripts/run-native.sh \
+  > ~/arpeggio/service.log 2>&1 &'
+```
+
+The app is then at **`https://192.168.0.23:8000/`** (accept the one-time
+self-signed warning). The `/omr` and `/health` API routes stay under the same
+origin; the static mount is registered last so it never shadows them.
 
 ---
 

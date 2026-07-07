@@ -14,6 +14,15 @@ import os
 HOST: str = os.environ.get("OMR_HOST", "0.0.0.0")
 PORT: int = int(os.environ.get("OMR_PORT", "8000"))
 
+# ---- Web app / CORS --------------------------------------------------------
+# Directory of the built web app (apps/web/dist). When set and existing, it is
+# served at "/" so the whole thing is one deployable unit. Empty = API only.
+STATIC_DIR: str = os.environ.get("OMR_STATIC_DIR", "")
+
+# Comma-separated allowed origins for the API, so a dev app on
+# http://localhost:5173 can call it. "*" allows all origins.
+CORS_ORIGINS: str = os.environ.get("OMR_CORS_ORIGINS", "*")
+
 # ---- Audiveris -------------------------------------------------------------
 # Path to the Audiveris executable/launcher. The Dockerfile and run-native.sh
 # export this pointing at the built distribution (bin/Audiveris).

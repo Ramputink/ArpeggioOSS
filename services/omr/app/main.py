@@ -11,6 +11,10 @@ The full request flow is:
 
 Everything runs on the backend machine (an old Intel MacBook on the LAN); the
 service binds 0.0.0.0 so the dev machine and, later, the iPhone can reach it.
+
+When config.STATIC_DIR points at the built web app (apps/web/dist), the service
+also serves it at "/", so backend + frontend ship as one deployable unit and the
+browser microphone (getUserMedia, needs a secure context) works over HTTPS.
 """
 from __future__ import annotations
 
@@ -20,7 +24,9 @@ import tempfile
 import uuid
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import audiveris, config, pdfutil, preprocess
 
@@ -28,6 +34,18 @@ app = FastAPI(
     title="Arpeggio OMR service",
     description="Optical Music Recognition: sheet image/PDF -> MusicXML, via Audiveris.",
     version="0.1.0",
+)
+
+# Allow the dev web app (e.g. http://localhost:5173) to call the API from a
+# different origin. "*" -> allow all; otherwise a comma-separated allowlist.
+_cors_origins = ["*"] if config.CORS_ORIGINS.strip() == "*" else [
+    o.strip() for o in config.CORS_ORIGINS.split(",") if o.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
 )
 
 
@@ -110,3 +128,14 @@ async def omr(
     finally:
         # Best-effort cleanup of the per-job scratch directory.
         shutil.rmtree(job_dir, ignore_errors=True)
+
+
+# Serve the built web app at "/" as the very last route so it never shadows the
+# API routes above. html=True makes it fall back to index.html (SPA routing).
+# Mounted only when OMR_STATIC_DIR is set and actually exists on disk.
+if config.STATIC_DIR and os.path.isdir(config.STATIC_DIR):
+    app.mount(
+        "/",
+        StaticFiles(directory=config.STATIC_DIR, html=True),
+        name="web",
+    )

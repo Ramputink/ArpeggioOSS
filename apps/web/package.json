@@ -1,0 +1,20 @@
+{
+  "name": "@arpeggio/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Arpeggio practice web app (Camino A hybrid): import score -> OMR -> render -> practice by microphone (YIN + follow-you + feedback). Bundled to static assets and served by the OMR backend.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --serve"
+  },
+  "dependencies": {
+    "@arpeggio/musicxml-parser": "0.1.0",
+    "@arpeggio/practice-engine": "0.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.2"
+  }
+}
