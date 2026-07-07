@@ -7,7 +7,7 @@ MusicXML → internal model. No iOS/audio/render.
 ## Decisions
 
 ### D1 — Audiveris runs on a backend, never on-device
-Audiveris is a heavy Java (JDK 21) application and cannot run on an iPhone. It
+Audiveris is a heavy Java (JDK 25) application and cannot run on an iPhone. It
 lives in an HTTP service on the LAN backend (the old Intel MacBook at
 `192.168.0.23`); clients upload a file and receive MusicXML.
 
@@ -42,7 +42,7 @@ backend and avoids requiring a display in batch mode.
 
 | Component | Version | How verified | Requirement |
 |-----------|---------|--------------|-------------|
-| Audiveris | 5.10.2  | GitHub releases page | JDK 21, Gradle 8.5 |
+| Audiveris | 5.10.2  | GitHub releases page | JDK 25, Gradle 8.5 |
 | JDK       | 21      | Audiveris build docs | Temurin 21 (Docker) / `openjdk@21` (brew) |
 | Tesseract | bundled (javacpp) | Audiveris handbook | `eng` `tessdata` provided at runtime |
 | Batch CLI | — | Audiveris docs | `Audiveris -batch -export -output <dir> <input>` → `.mxl` |

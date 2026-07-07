@@ -30,7 +30,7 @@ exercises the whole thing end-to-end.
 
 ## Component versions (verified July 2026)
 
-- **Audiveris 5.10.2** — needs **JDK 21**, built with Gradle 8.5. Batch CLI:
+- **Audiveris 5.10.2** — needs **JDK 25**, built with Gradle 8.5. Batch CLI:
   `Audiveris -batch -export -output <dir> <input>` → compressed MusicXML (`.mxl`).
 - **Tesseract** — bundled by Audiveris via javacpp bindings; only the `eng`
   `tessdata` language file is provided at runtime.
@@ -68,7 +68,7 @@ curl http://192.168.0.23:8000/health
 
 ### Option B — Native (when Docker Desktop is too heavy for the machine)
 
-Requires [Homebrew](https://brew.sh). The installer pulls JDK 21 + Tesseract,
+Requires [Homebrew](https://brew.sh). The installer pulls JDK 25 + Tesseract,
 builds Audiveris, and creates a Python virtualenv:
 
 ```bash

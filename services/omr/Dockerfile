@@ -3,8 +3,8 @@
 # Arpeggio OMR service — x86_64 image for the old Intel MacBook backend.
 #
 # Multi-stage:
-#   1) builder  — JDK 21 + Gradle build of Audiveris 5.10.2 from source.
-#   2) runtime  — JRE 21 + Python + Tesseract data + the FastAPI service.
+#   1) builder  — JDK 25 + Gradle build of Audiveris 5.10.2 from source.
+#   2) runtime  — JRE 25 + Python + Tesseract data + the FastAPI service.
 #
 # Build this ON the amd64 target (the Intel Mac) to avoid slow qemu emulation:
 #   docker compose up -d --build
@@ -12,7 +12,7 @@
 # ---------------------------------------------------------------------------
 # Stage 1: build Audiveris from source
 # ---------------------------------------------------------------------------
-FROM eclipse-temurin:21-jdk AS builder
+FROM eclipse-temurin:25-jdk AS builder
 
 ARG AUDIVERIS_REF=5.10.2
 ENV DEBIAN_FRONTEND=noninteractive
@@ -41,7 +41,7 @@ RUN mkdir -p /opt/audiveris \
 # ---------------------------------------------------------------------------
 # Stage 2: runtime
 # ---------------------------------------------------------------------------
-FROM eclipse-temurin:21-jre AS runtime
+FROM eclipse-temurin:25-jre AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive
 

@@ -1,6 +1,6 @@
 """Thin wrapper around the Audiveris OMR engine, run in headless batch mode.
 
-Audiveris (https://github.com/Audiveris/audiveris, v5.10.2, JDK 21) is a Java
+Audiveris (https://github.com/Audiveris/audiveris, v5.10.2, JDK 25) is a Java
 application. We drive it via its command-line batch interface:
 
     Audiveris -batch -export -output <dir> <input>

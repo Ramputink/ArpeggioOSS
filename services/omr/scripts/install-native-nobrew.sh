@@ -16,10 +16,12 @@
 set -euo pipefail
 
 AUDIVERIS_REF="${AUDIVERIS_REF:-5.10.2}"
+# Audiveris 5.10.2 compiles at Java source release 25, so it needs JDK 25.
+JDK_VERSION="${JDK_VERSION:-25}"
 SERVICE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # services/omr
 BASE="${HOME}/arpeggio"
 BUILD_DIR="${SERVICE_DIR}/.native"
-JDK_DIR="${BASE}/jdk21"
+JDK_DIR="${BASE}/jdk${JDK_VERSION}"
 TESSDATA_DIR="${BASE}/tessdata"
 AUDIVERIS_SRC="${BASE}/audiveris-src"
 AUDIVERIS_DIST="${BASE}/audiveris"
@@ -30,14 +32,14 @@ echo "==> [1/6] Arpeggio native (no-Homebrew) install on $(sw_vers -productVersi
 
 # 1. Temurin JDK 21 ----------------------------------------------------------
 if [ ! -x "${JDK_DIR}/Contents/Home/bin/java" ]; then
-  echo "==> [2/6] Downloading Temurin JDK 21 (x64)"
+  echo "==> [2/6] Downloading Temurin JDK ${JDK_VERSION} (x64)"
   mkdir -p "${JDK_DIR}"
-  curl -fsSL -o "${BASE}/jdk21.tar.gz" \
-    "https://api.adoptium.net/v3/binary/latest/21/ga/mac/x64/jdk/hotspot/normal/eclipse"
-  tar -xzf "${BASE}/jdk21.tar.gz" -C "${JDK_DIR}" --strip-components=1
-  rm -f "${BASE}/jdk21.tar.gz"
+  curl -fsSL -o "${BASE}/jdk.tar.gz" \
+    "https://api.adoptium.net/v3/binary/latest/${JDK_VERSION}/ga/mac/x64/jdk/hotspot/normal/eclipse"
+  tar -xzf "${BASE}/jdk.tar.gz" -C "${JDK_DIR}" --strip-components=1
+  rm -f "${BASE}/jdk.tar.gz"
 else
-  echo "==> [2/6] JDK 21 already present"
+  echo "==> [2/6] JDK ${JDK_VERSION} already present"
 fi
 export JAVA_HOME="${JDK_DIR}/Contents/Home"
 export PATH="${JAVA_HOME}/bin:${PATH}"

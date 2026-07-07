@@ -3,7 +3,7 @@
 # Native (no-Docker) installer for the Arpeggio OMR service on macOS.
 # Intended for the Intel MacBook backend when Docker Desktop is too heavy.
 #
-# It installs JDK 21 + Tesseract via Homebrew, builds Audiveris 5.10.2 from
+# It installs JDK 25 + Tesseract via Homebrew, builds Audiveris 5.10.2 from
 # source, and creates a Python virtualenv with the service dependencies.
 #
 # Idempotent-ish: re-running skips work that is already done.
@@ -25,16 +25,16 @@ if ! command -v brew >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "==> Installing JDK 21 + Tesseract via Homebrew"
-brew list openjdk@21 >/dev/null 2>&1 || brew install openjdk@21
+echo "==> Installing JDK 25 + Tesseract via Homebrew"
+brew list openjdk@25 >/dev/null 2>&1 || brew install openjdk@25
 brew list tesseract   >/dev/null 2>&1 || brew install tesseract
 brew list python@3.12 >/dev/null 2>&1 || brew install python@3.12
 
-# Locate the Homebrew JDK 21 (Apple Silicon vs Intel prefixes differ).
-JAVA_HOME="$(brew --prefix openjdk@21)/libexec/openjdk.jdk/Contents/Home"
+# Locate the Homebrew JDK 25 (Apple Silicon vs Intel prefixes differ).
+JAVA_HOME="$(brew --prefix openjdk@25)/libexec/openjdk.jdk/Contents/Home"
 if [ ! -x "${JAVA_HOME}/bin/java" ]; then
   # Intel Homebrew lays it out slightly differently.
-  JAVA_HOME="$(brew --prefix openjdk@21)"
+  JAVA_HOME="$(brew --prefix openjdk@25)"
 fi
 export JAVA_HOME
 export PATH="${JAVA_HOME}/bin:${PATH}"
