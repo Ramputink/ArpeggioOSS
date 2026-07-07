@@ -8,6 +8,9 @@ fastapi>=0.110,<1            # HTTP framework
 uvicorn[standard]>=0.29      # ASGI server
 python-multipart>=0.0.9      # multipart/form-data uploads for FastAPI
 
-opencv-python-headless>=4.8,<5  # image preprocessing (no GUI deps)
-numpy>=1.26,<3
+# OpenCV: 4.10+ x86_64 wheels require macOS 12/13/14; 4.9.0.80 is the newest with
+# a macOS 11-compatible wheel (macosx_10_16). Pin <4.10 to avoid a source build.
+opencv-python-headless>=4.8,<4.10  # image preprocessing (no GUI deps)
+# numpy <2: opencv 4.9 was built against the numpy 1.x C-ABI; numpy 2 breaks it.
+numpy>=1.26,<2
 PyMuPDF>=1.24                # PDF rasterize + split + rebuild clean PDF (imported as `fitz`)
