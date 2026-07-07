@@ -57,17 +57,24 @@ fi
 export TESSDATA_PREFIX="${TESSDATA_DIR}"
 
 # 3. Build Audiveris from source --------------------------------------------
-if [ ! -d "${AUDIVERIS_SRC}/.git" ]; then
-  echo "==> [4/6] Cloning Audiveris ${AUDIVERIS_REF}"
-  git clone --depth 1 --branch "${AUDIVERIS_REF}" \
-      https://github.com/Audiveris/audiveris.git "${AUDIVERIS_SRC}"
+# Skip the (multi-minute) build if a launcher is already present.
+EXISTING_LAUNCHER="$(ls -d "${AUDIVERIS_DIST}"/app-*/bin/Audiveris 2>/dev/null | head -1 || true)"
+if [ -x "${EXISTING_LAUNCHER:-/nonexistent}" ]; then
+  echo "==> [4/6] Audiveris already built: ${EXISTING_LAUNCHER}"
+  AUDIVERIS_LAUNCHER="${EXISTING_LAUNCHER}"
+else
+  if [ ! -d "${AUDIVERIS_SRC}/.git" ]; then
+    echo "==> [4/6] Cloning Audiveris ${AUDIVERIS_REF}"
+    git clone --depth 1 --branch "${AUDIVERIS_REF}" \
+        https://github.com/Audiveris/audiveris.git "${AUDIVERIS_SRC}"
+  fi
+  echo "==> [4/6] Building Audiveris (several minutes)…"
+  ( cd "${AUDIVERIS_SRC}" && ./gradlew --no-daemon --console=plain build -x test )
+  mkdir -p "${AUDIVERIS_DIST}"
+  tar -xf "${AUDIVERIS_SRC}"/app/build/distributions/app-*.tar -C "${AUDIVERIS_DIST}"
+  AUDIVERIS_LAUNCHER="$(ls -d "${AUDIVERIS_DIST}"/app-*/bin/Audiveris | head -1)"
+  echo "==> Audiveris launcher: ${AUDIVERIS_LAUNCHER}"
 fi
-echo "==> [4/6] Building Audiveris (several minutes)…"
-( cd "${AUDIVERIS_SRC}" && ./gradlew --no-daemon --console=plain build -x test )
-mkdir -p "${AUDIVERIS_DIST}"
-tar -xf "${AUDIVERIS_SRC}"/app/build/distributions/app-*.tar -C "${AUDIVERIS_DIST}"
-AUDIVERIS_LAUNCHER="$(ls -d "${AUDIVERIS_DIST}"/app-*/bin/Audiveris | head -1)"
-echo "==> Audiveris launcher: ${AUDIVERIS_LAUNCHER}"
 
 # 4. Python 3.12 via uv ------------------------------------------------------
 if ! command -v uv >/dev/null 2>&1 && [ ! -x "${HOME}/.local/bin/uv" ]; then

@@ -14,7 +14,6 @@ from typing import List
 
 import cv2
 import fitz  # PyMuPDF
-import img2pdf
 import numpy as np
 
 from . import config
@@ -115,17 +114,29 @@ def _load_pdf_pages(path: str, dpi: int) -> List[np.ndarray]:
 # Public API
 # ---------------------------------------------------------------------------
 def _pages_to_pdf(pages: List[np.ndarray], out_pdf: str, dpi: int) -> None:
-    """Save a list of binarized pages as a single PDF at `dpi`."""
-    png_bytes: List[bytes] = []
-    for page in pages:
-        ok, buf = cv2.imencode(".png", page)
-        if not ok:
-            raise RuntimeError("Failed to encode page to PNG")
-        png_bytes.append(buf.tobytes())
-    # Pin the DPI in the PDF so Audiveris interprets the scale correctly.
-    layout = img2pdf.get_fixed_dpi_layout_fun((dpi, dpi))
-    with open(out_pdf, "wb") as f:
-        f.write(img2pdf.convert(png_bytes, layout_fun=layout))
+    """Save a list of binarized pages as a single PDF at `dpi`.
+
+    Uses PyMuPDF (already a dependency for rasterization) rather than img2pdf, so
+    we avoid the pikepdf/qpdf build chain that has no wheel on the macOS 11
+    backend. Each page is sized so its pixels resolve at exactly `dpi`, keeping
+    the physical scale correct for Audiveris.
+    """
+    doc = fitz.open()
+    try:
+        for page in pages:
+            ok, buf = cv2.imencode(".png", page)
+            if not ok:
+                raise RuntimeError("Failed to encode page to PNG")
+            png = buf.tobytes()
+            h_px, w_px = page.shape[:2]
+            # Convert pixel dimensions to PDF points (72 pt/inch) at target DPI.
+            w_pt = w_px * 72.0 / dpi
+            h_pt = h_px * 72.0 / dpi
+            pdf_page = doc.new_page(width=w_pt, height=h_pt)
+            pdf_page.insert_image(fitz.Rect(0, 0, w_pt, h_pt), stream=png)
+        doc.save(out_pdf)
+    finally:
+        doc.close()
 
 
 def preprocess_to_pdf(input_path: str, out_pdf: str, dpi: int | None = None) -> int:

@@ -10,5 +10,4 @@ python-multipart>=0.0.9      # multipart/form-data uploads for FastAPI
 
 opencv-python-headless>=4.8,<5  # image preprocessing (no GUI deps)
 numpy>=1.26,<3
-PyMuPDF>=1.24                # PDF rasterization + page splitting (imported as `fitz`)
-img2pdf>=0.5                 # recombine clean pages into a single PDF for Audiveris
+PyMuPDF>=1.24                # PDF rasterize + split + rebuild clean PDF (imported as `fitz`)
