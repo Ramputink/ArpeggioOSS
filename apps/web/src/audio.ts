@@ -58,12 +58,16 @@ export class MicSource implements FrameSource {
   private source: MediaStreamAudioSourceNode | null = null;
   private processor: ScriptProcessorNode | null = null;
   private sink: GainNode | null = null;
+  /** Set by stop(); if it flips during the async getUserMedia prompt we must
+   *  release the just-granted stream instead of leaking an open microphone. */
+  private stopped = false;
 
   get label(): string {
     return this._label;
   }
 
   async start(onFrame: (frame: AudioFrame) => void): Promise<void> {
+    this.stopped = false;
     // Guard against environments without the Web Audio API entirely.
     const Ctx = resolveAudioContext();
     if (!Ctx || typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
@@ -86,6 +90,15 @@ export class MicSource implements FrameSource {
       this._label = this.describeGetUserMediaError(err);
       // Re-throw so the UI can surface the failure to the user.
       throw err instanceof Error ? err : new Error(this._label);
+    }
+
+    // If practice was stopped while the permission prompt was open, don't build
+    // the graph — release the microphone we were just granted and bail.
+    if (this.stopped) {
+      this.stream.getTracks().forEach((track) => track.stop());
+      this.stream = null;
+      this._label = "stopped";
+      return;
     }
 
     try {
@@ -123,6 +136,11 @@ export class MicSource implements FrameSource {
       this.processor.connect(this.sink);
       this.sink.connect(ctx.destination);
 
+      // A stop() that landed during ctx.resume() await: tear down now.
+      if (this.stopped) {
+        this.stop();
+        return;
+      }
       this._label = "listening";
     } catch (err) {
       // Something in the graph setup failed — clean up and report.
@@ -133,6 +151,7 @@ export class MicSource implements FrameSource {
   }
 
   stop(): void {
+    this.stopped = true;
     // Disconnect nodes (order doesn't matter; guard each for partial setup).
     this.processor?.disconnect();
     if (this.processor) this.processor.onaudioprocess = null;
@@ -208,11 +227,18 @@ export class SimSource implements FrameSource {
   private readonly bpm: number;
   private readonly errorRate: number;
   private readonly sampleRate = 44100;
-  /** Frames of sine synthesized per note before moving on. */
-  private readonly framesPerNote = 5;
+  /**
+   * Frames of sine synthesized per note. A multiple of the consumer's window
+   * size (LivePractice batches 4 frames) so every note's frames form complete
+   * windows and none are left in a trailing partial window — otherwise the last
+   * note could be dropped and the follower would never reach `done`.
+   */
+  private readonly framesPerNote = 8;
 
   private timers: ReturnType<typeof setTimeout>[] = [];
   private running = false;
+  /** Last emitted timeSec, to keep the synthetic clock strictly increasing. */
+  private lastTimeSec = -1;
 
   constructor(score: Score, opts: SimOptions = {}) {
     this.bpm = opts.bpm ?? 90;
@@ -243,6 +269,7 @@ export class SimSource implements FrameSource {
 
   async start(onFrame: (frame: AudioFrame) => void): Promise<void> {
     this.running = true;
+    this.lastTimeSec = -1;
     if (this.melody.length === 0) return;
 
     const beatSec = 60 / this.bpm;
@@ -280,9 +307,11 @@ export class SimSource implements FrameSource {
   ): void {
     const hz = midiToHz(midi);
     for (let k = 0; k < this.framesPerNote; k++) {
-      // timeSec is derived from the beat clock plus this frame's offset, so it
-      // increases monotonically across the whole melody.
-      const timeSec = noteStartSec + k * frameDurSec;
+      // Derive timeSec from the beat clock, but clamp to strictly exceed the
+      // last emitted time so a fast tempo (where consecutive note bursts would
+      // otherwise overlap in time) can't make the clock step backwards.
+      const timeSec = Math.max(noteStartSec + k * frameDurSec, this.lastTimeSec + frameDurSec);
+      this.lastTimeSec = timeSec;
       const samples = this.synthesize(hz, timeSec);
       onFrame({ samples, sampleRate: this.sampleRate, timeSec });
     }

@@ -121,6 +121,9 @@ export class PracticeSession {
       polyphony: group.length > 1,
       expectedMidi: group.map((n) => n.midi),
     };
+    // Capture the measure BEFORE onDetection advances the cursor, so events are
+    // filed under the measure actually being played (not the next one).
+    const measure = group[0]?.measure ?? this.follower.state.measure;
 
     // Run the combiner across the window; its settled decision picks the engine.
     let decision: DetectionResult = { notes: [], engine: "mono", confidence: 0 };
@@ -138,20 +141,28 @@ export class PracticeSession {
       ...this.follower.onTick(lastTime),
     ];
 
-    // Feed the feedback loops.
+    // Student model: one record per judged event, under the measure being played.
+    for (const ev of events) {
+      this.student.record(ev, measure);
+    }
+
+    // Calibrator: ONE observation per window (not per event, which would
+    // over-count). Only grade MOTOR 1 when the player actually hit a correct
+    // note — a `wrong`/`hesitation` means the *player* deviated, not that the
+    // detector failed, so we must not treat it as a MOTOR 1 miss (that would
+    // wrongly escalate to MOTOR 2 over a session). Silence still feeds the
+    // noise-floor estimate.
+    const hadCorrect = events.some((e) => e.kind === "correct");
     const meanConf = mean(estimates.map((e) => e.probability));
     const meanEnergy = mean(estimates.map((e) => e.energy));
     const silence = this.calibrator.getThresholds().silenceEnergy;
-    for (const ev of events) {
-      this.student.record(ev, this.follower.state.measure);
-      this.calibrator.observe({
-        motor1Correct: ev.kind === "correct" && decision.engine === "mono",
-        monoConfidence: meanConf,
-        frameEnergy: meanEnergy,
-        playing: meanEnergy > silence,
-        highCertainty: ev.kind === "correct",
-      });
-    }
+    this.calibrator.observe({
+      motor1Correct: hadCorrect ? decision.engine === "mono" : undefined,
+      monoConfidence: meanConf,
+      frameEnergy: meanEnergy,
+      playing: meanEnergy > silence,
+      highCertainty: hadCorrect,
+    });
 
     return events;
   }

@@ -112,14 +112,22 @@ async def omr(
         #    when omr_input is actually a PDF (always true after preprocessing).
         output_dir = os.path.join(job_dir, "out")
         is_pdf = os.path.splitext(omr_input)[1].lower() == ".pdf"
+        headers: dict[str, str] = {}
         if is_pdf and n_pages > config.MAX_PAGES:
-            musicxml = audiveris.run_omr_paged(omr_input, output_dir)
+            musicxml, skipped = audiveris.run_omr_paged(omr_input, output_dir)
+            if skipped:
+                # Surface silently-dropped pages so the caller knows content is
+                # missing (the merge renumbers surviving measures continuously).
+                headers["X-OMR-Warning"] = (
+                    f"pages not recognized and omitted: {skipped}"
+                )
         else:
             musicxml = audiveris.run_omr(omr_input, output_dir)
 
         return PlainTextResponse(
             content=musicxml,
             media_type="application/vnd.recordare.musicxml+xml",
+            headers=headers,
         )
     except audiveris.AudiverisError as e:
         raise HTTPException(status_code=422, detail=str(e))

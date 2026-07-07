@@ -76,8 +76,30 @@ def test_mismatched_part_counts_falls_back() -> None:
     assert len(root.findall("part/measure")) == 1
 
 
+def test_namespaced_page_is_not_dropped() -> None:
+    # Regression: a page carrying a default XML namespace must still merge — a
+    # tag-name findall("part") would return nothing and silently drop the page.
+    ns_page = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<score-partwise xmlns="http://example.com/musicxml" version="4.0">'
+        '  <part-list><score-part id="P1"><part-name>M</part-name></score-part></part-list>'
+        '  <part id="P1"><measure number="1">'
+        "    <attributes><divisions>1</divisions></attributes>"
+        "    <note><pitch><step>E</step><octave>4</octave></pitch>"
+        "      <duration>4</duration></note>"
+        "  </measure></part>"
+        "</score-partwise>"
+    )
+    merged = mxlmerge.merge_musicxml([_page(1, "C"), ns_page])
+    root = ET.fromstring(merged)
+    # Base (non-namespaced) part now carries both measures, renumbered 1..2.
+    measures = [m for m in root.iter() if m.tag.rsplit("}", 1)[-1] == "measure"]
+    assert len(measures) == 2, f"namespaced page was dropped: {len(measures)} measures"
+
+
 if __name__ == "__main__":
     test_two_pages_merge_to_two_measures()
     test_single_document_passthrough()
     test_mismatched_part_counts_falls_back()
+    test_namespaced_page_is_not_dropped()
     print("OK: all mxlmerge tests passed")

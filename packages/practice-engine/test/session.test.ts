@@ -86,3 +86,43 @@ test("the feedback loops are populated and thresholds stay valid", async () => {
   const stats = session.student.statsByMeasure();
   assert.ok((stats.get(1)?.attempts ?? 0) >= 4);
 });
+
+// Regression: events must be filed under the measure being PLAYED, not the
+// measure the cursor advanced into. Playing the last note of measure 1 used to
+// leak its "correct" onto measure 2. (Found in review.)
+const TWO_BARS = `<?xml version="1.0"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>1</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><staff>1</staff></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><staff>1</staff></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><staff>1</staff></note>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><staff>1</staff></note>
+    </measure>
+    <measure number="2">
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><staff>1</staff></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><staff>1</staff></note>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><staff>1</staff></note>
+      <note><pitch><step>C</step><octave>5</octave></pitch><duration>1</duration><voice>1</voice><staff>1</staff></note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+test("per-measure attribution: end-of-measure notes don't leak forward", async () => {
+  const score = parseMusicXML(TWO_BARS);
+  const session = new PracticeSession(score);
+  const midis = [60, 62, 64, 65, 67, 69, 71, 72];
+  let t = 0;
+  for (const midi of midis) {
+    await session.listen(sineFrames(midi, t));
+    t += 0.5;
+  }
+  const stats = session.student.statsByMeasure();
+  assert.equal(stats.get(1)?.attempts, 4, "measure 1 should have exactly 4 attempts");
+  assert.equal(stats.get(1)?.correct, 4);
+  assert.equal(stats.get(2)?.attempts, 4, "measure 2 should have exactly 4 attempts");
+  assert.equal(stats.get(2)?.correct, 4);
+});

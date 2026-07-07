@@ -18,8 +18,8 @@ Strategy (stdlib ElementTree only, no external deps):
 Known limitations:
   * Parts are matched by index, not by `<score-part>` id. Multi-part scores
     whose parts appear in a different order per page are not handled.
-  * If pages disagree on part count, we fall back to concatenating measures of
-    part index 0 only (best effort) and log a warning.
+  * If pages disagree on part count, we merge the parts they share by index
+    (best effort) and log a warning; extra parts are left untouched.
   * Musical structure that spans a page break — ties, slurs, repeat barlines,
     voltas — is preserved verbatim from each page but not reconciled across the
     seam, so a tie starting on the last measure of page N is not joined to its
@@ -36,14 +36,24 @@ log = logging.getLogger(__name__)
 _XML_DECL = '<?xml version="1.0" encoding="UTF-8"?>'
 
 
+def _localname(tag: str) -> str:
+    """Strip any `{namespace}` prefix from an ElementTree tag."""
+    return tag.rsplit("}", 1)[-1]
+
+
 def _parts(root: ET.Element) -> List[ET.Element]:
-    """Return the `<part>` elements of a score-partwise root, in document order."""
-    return root.findall("part")
+    """Return the `<part>` elements of a score-partwise root, in document order.
+
+    Matches by local name so a page carrying a default XML namespace (where
+    `findall("part")` would return nothing and the page would be silently
+    dropped) is still handled.
+    """
+    return [c for c in root if _localname(c.tag) == "part"]
 
 
 def _measures(part: ET.Element) -> List[ET.Element]:
     """Return the `<measure>` elements of a part, in document order."""
-    return part.findall("measure")
+    return [c for c in part if _localname(c.tag) == "measure"]
 
 
 def _renumber(part: ET.Element) -> None:
@@ -98,14 +108,18 @@ def merge_musicxml(docs: List[str]) -> str:
                 for measure in _measures(page_part):
                     base_part.append(measure)
         else:
-            # Fall back to concatenating the first part only (best effort).
+            # Part counts disagree (e.g. Audiveris split a grand staff on one
+            # page): append by index for as many parts as both share, rather than
+            # dropping all but part 0. Extra parts on either side are left as-is.
+            shared = min(len(page_parts), len(base_parts))
             log.warning(
                 "merge_musicxml: page %d has %d part(s) but base has %d; "
-                "concatenating part index 0 only",
-                page_index, len(page_parts), len(base_parts),
+                "merging the first %d by index",
+                page_index, len(page_parts), len(base_parts), shared,
             )
-            for measure in _measures(page_parts[0]):
-                base_parts[0].append(measure)
+            for bi in range(shared):
+                for measure in _measures(page_parts[bi]):
+                    base_parts[bi].append(measure)
 
     # Renumber every base part so measures run 1..N continuously.
     for part in base_parts:

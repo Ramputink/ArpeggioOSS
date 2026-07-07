@@ -34,8 +34,10 @@ export class PianoRoll implements ScoreRenderer {
     this.events = [...score.events].sort((a, b) => a.onset - b.onset || a.pitchMidi - b.pitchMidi);
     this.beats = Math.max(1, this.events.reduce((m, e) => Math.max(m, e.offset), 0));
     const midis = this.events.map((e) => e.pitchMidi);
-    this.minMidi = Math.min(...midis) - 2;
-    this.maxMidi = Math.max(...midis) + 2;
+    // Guard the empty-score case: Math.min/max of [] are ±Infinity, which would
+    // make the canvas geometry NaN. Fall back to a sensible middle octave range.
+    this.minMidi = (midis.length ? Math.min(...midis) : 60) - 2;
+    this.maxMidi = (midis.length ? Math.max(...midis) : 72) + 2;
     const ts = score.timeSignatures[0];
     this.beatsPerBar = ts ? (ts.beats * 4) / ts.beatType : 4;
     this.cursorBeat = 0;

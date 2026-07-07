@@ -49,6 +49,13 @@ export interface CombinerOptions {
   hysteresisFrames?: number;
   /** Semitone tolerance for mono-vs-expected agreement. Default 0.5. */
   pitchTolerance?: number;
+  /**
+   * Confidence above which a loud mono pitch is trusted as truly monophonic.
+   * Used by rule (d): a loud frame whose confidence is only *moderate* (between
+   * `thetaLow` and this) is a likely chord smear and escalates to MOTOR 2.
+   * Must be > `thetaLow`. Default 0.85.
+   */
+  thetaHigh?: number;
 }
 
 /** Fuses the two engines with temporal hysteresis to avoid decision flicker. */
@@ -57,6 +64,7 @@ export class Combiner {
   private readonly thresholds: Thresholds;
   private readonly hysteresisFrames: number;
   private readonly pitchTolerance: number;
+  private readonly thetaHigh: number;
 
   // Hysteresis state, carried across `combine()` calls.
   private decision: EngineId = "mono";
@@ -68,6 +76,8 @@ export class Combiner {
     this.thresholds = opts.thresholds ?? DEFAULT_THRESHOLDS;
     this.hysteresisFrames = opts.hysteresisFrames ?? 3;
     this.pitchTolerance = opts.pitchTolerance ?? 0.5;
+    // Keep thetaHigh strictly above thetaLow so rule (d) has a real window.
+    this.thetaHigh = Math.max(opts.thetaHigh ?? 0.85, this.thresholds.thetaLow + 1e-3);
   }
 
   /** The engine the combiner currently trusts (after hysteresis). */
@@ -154,10 +164,15 @@ export class Combiner {
     return !expectedMidi.some((e) => Math.abs(e - m) <= this.pitchTolerance);
   }
 
-  /** Rule (d): energy well above silence yet no stable mono pitch. */
+  /** Rule (d): loud energy but the mono pitch isn't *high*-confidence.
+   *
+   * Uses `thetaHigh` (not `thetaLow`) so this is a genuinely independent trigger
+   * from rule (b): a loud chord where YIN latches a partial and returns only
+   * moderate confidence (thetaLow ≤ prob < thetaHigh) — which rule (b) misses —
+   * is exactly the "chord smears the autocorrelation" case MOTOR 2 should catch. */
   private loudButUnstable(estimate: PitchEstimate, thresholds: Thresholds): boolean {
     const loud = estimate.energy >= Math.max(0.05, thresholds.silenceEnergy * 5);
-    const unstable = estimate.midi === null || estimate.probability < thresholds.thetaLow;
+    const unstable = estimate.midi === null || estimate.probability < this.thetaHigh;
     return loud && unstable;
   }
 

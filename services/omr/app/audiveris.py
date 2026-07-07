@@ -132,7 +132,7 @@ def run_omr(input_path: str, output_dir: str) -> str:
     return _read_musicxml(mxl)
 
 
-def run_omr_paged(pdf_path: str, output_dir: str) -> str:
+def run_omr_paged(pdf_path: str, output_dir: str) -> "tuple[str, list[int]]":
     """OMR a multi-page PDF one page at a time, then merge the results.
 
     The PDF is split into single-page PDFs (pdfutil.split_pages) and each page is
@@ -142,21 +142,26 @@ def run_omr_paged(pdf_path: str, output_dir: str) -> str:
 
     Use this instead of run_omr for PDFs whose page count exceeds
     config.MAX_PAGES. Raises AudiverisError if no page yields output.
+
+    Returns (musicxml, skipped_pages): a page that Audiveris can't read is skipped
+    rather than sinking the whole book, but its 1-based number is returned so the
+    caller can warn the user that content is missing (the merge renumbers the
+    surviving measures continuously, so the loss is otherwise invisible).
     """
     os.makedirs(output_dir, exist_ok=True)
     pages_dir = os.path.join(output_dir, "pages")
     page_pdfs = pdfutil.split_pages(pdf_path, pages_dir)
 
     docs: List[str] = []
+    skipped: List[int] = []
     errors: List[str] = []
     for i, page_pdf in enumerate(page_pdfs, start=1):
         page_out = os.path.join(output_dir, f"page-{i:03d}-out")
         try:
             docs.append(run_omr(page_pdf, page_out))
         except AudiverisError as e:
-            # A single unreadable page shouldn't sink the whole book; note it
-            # and keep going so the rest of the score still comes through.
             log.warning("run_omr_paged: page %d failed, skipping: %s", i, e)
+            skipped.append(i)
             errors.append(f"page {i}: {e}")
 
     if not docs:
@@ -164,4 +169,4 @@ def run_omr_paged(pdf_path: str, output_dir: str) -> str:
             "Audiveris produced no MusicXML output for any of the "
             f"{len(page_pdfs)} pages.\n" + "\n".join(errors)
         )
-    return mxlmerge.merge_musicxml(docs)
+    return mxlmerge.merge_musicxml(docs), skipped

@@ -124,3 +124,23 @@ test("dtwAlign maps a stream with a spurious note back onto the expected run", (
   assert.equal(mapping[4], 3); // 65 -> 65
   assert.ok(mapping[2] >= 1 && mapping[2] <= 2); // spurious note near its neighbours
 });
+
+// Regression: the online DtwFollower must report intermediate positions. The
+// classic fixed-endpoint backtrack made every latest detection snap to the last
+// expected note, pinning currentIndex to the end on the first detection.
+// (Found in review; fixed via free-endpoint alignment.)
+test("DtwFollower reports intermediate positions, not pinned to the end", async () => {
+  const { DtwFollower } = await import("../src/follower/dtw.js");
+  const exp = [60, 62, 64, 65].map((midi, i) => ({
+    midi, onset: i, offset: i + 1, measure: 1, voice: 1, staff: 1,
+  }));
+  const det = (midi: number) => ({
+    midi, onsetSec: 0, offsetSec: null, confidence: 1, engine: "mono" as const,
+  });
+  const f = new DtwFollower(exp);
+  const i0 = f.onDetected(det(60));
+  assert.ok(i0 < 3, `first note must not pin to the last index, got ${i0}`);
+  assert.equal(i0, 0);
+  const i1 = f.onDetected(det(62));
+  assert.ok(i1 >= i0 && i1 < 3, `second note should progress, got ${i1}`);
+});

@@ -170,7 +170,16 @@ function checkMeasureDurations(score: Score, warnings: QualityWarning[]): void {
   // flattened, so grouping by global time would conflate the passes.
   const lengthByMeasure = new Map<number, number>();
   for (const e of score.events) {
-    const localEnd = e.position + (e.offset - e.onset);
+    let localEnd = e.position + (e.offset - e.onset);
+    // A tied note legitimately extends past the barline into the next measure;
+    // only its portion within this measure counts, so cross-barline ties (very
+    // common in piano music) don't read as a false "overfull" measure. A note
+    // whose onset itself is past the bar still flags (genuine misplacement).
+    if (e.tied) {
+      const sig = activeSigFor(e.measure);
+      const bar = sig ? (sig.beats * 4) / sig.beatType : Infinity;
+      localEnd = Math.min(localEnd, Math.max(e.position, bar));
+    }
     lengthByMeasure.set(e.measure, Math.max(lengthByMeasure.get(e.measure) ?? 0, localEnd));
   }
 

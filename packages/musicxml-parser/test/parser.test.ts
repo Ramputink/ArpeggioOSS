@@ -105,3 +105,33 @@ test("genuinely overfull measure is flagged", () => {
   const overfull = report.warnings.filter((w) => w.code === "measure-overfull");
   assert.equal(overfull.length, 1);
 });
+
+// Regression: a tie across a barline extends a note into the next measure. Its
+// out-of-measure duration must NOT count toward the starting measure's length,
+// or every legitimate cross-barline tie (ubiquitous in piano music) would be
+// flagged "measure-overfull". (Found in review.)
+test("cross-barline tie does not trigger a false overfull warning", () => {
+  const xml = `<?xml version="1.0"?>
+  <score-partwise version="4.0">
+    <part-list><score-part id="P1"><part-name>P</part-name></score-part></part-list>
+    <part id="P1">
+      <measure number="1">
+        <attributes><divisions>1</divisions>
+          <time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+        <note><pitch><step>C</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
+        <note><pitch><step>G</step><octave>4</octave></pitch><duration>2</duration><tie type="start"/><voice>1</voice></note>
+      </measure>
+      <measure number="2">
+        <note><pitch><step>G</step><octave>4</octave></pitch><duration>2</duration><tie type="stop"/><voice>1</voice></note>
+        <note><rest/><duration>2</duration><voice>1</voice></note>
+      </measure>
+    </part>
+  </score-partwise>`;
+  const score = parseMusicXML(xml);
+  // The tie merged into one G spanning into measure 2 (onset 2, offset 6).
+  const g = score.events.find((e) => e.pitchMidi === 67);
+  assert.ok(g && g.tied === true && g.offset - g.onset === 4);
+  const report = qualityReport(score);
+  const overfull = report.warnings.filter((w) => w.code === "measure-overfull");
+  assert.equal(overfull.length, 0);
+});

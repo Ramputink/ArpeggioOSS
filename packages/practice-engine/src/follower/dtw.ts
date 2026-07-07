@@ -27,6 +27,13 @@ export interface DtwOptions {
    * step. Keeps cost bounded on long pieces. Default 32.
    */
   window?: number;
+  /**
+   * Free-endpoint alignment: let the path end at the best-matching expected
+   * index for the last detection instead of forcing it onto the final expected
+   * note. Required for the online follower — with the classic fixed endpoint,
+   * every latest detection would snap to `expected.length - 1`. Default false.
+   */
+  freeEnd?: boolean;
 }
 
 function localCost(
@@ -81,7 +88,17 @@ export function dtwAlign(
   // Backtrack the optimal path, recording an expected index for each detection.
   const mapping = new Array<number>(n).fill(-1);
   let i = n;
+  // Fixed endpoint (j=m) forces the last detection onto the last expected note.
+  // With freeEnd, end at the expected index that best matches the last detection
+  // so the online follower can report an intermediate position.
   let j = m;
+  if (opts.freeEnd) {
+    let bestJ = 1;
+    for (let jj = 2; jj <= m; jj++) {
+      if (cost[n][jj] < cost[n][bestJ]) bestJ = jj;
+    }
+    j = bestJ;
+  }
   while (i > 0 && j > 0) {
     mapping[i - 1] = j - 1;
     const diag = cost[i - 1][j - 1];
@@ -133,7 +150,9 @@ export class DtwFollower {
   onDetected(note: DetectedNote): number {
     this.detected.push(note);
     const slice = this.detected.slice(-this.window);
-    const mapping = dtwAlign(slice, this.expected, this.opts);
+    // Free-endpoint so the latest detection maps to its best expected index,
+    // not always the final note.
+    const mapping = dtwAlign(slice, this.expected, { ...this.opts, freeEnd: true });
     const last = mapping[mapping.length - 1];
     if (last >= 0) {
       this.currentIndex = Math.max(this.currentIndex, last);

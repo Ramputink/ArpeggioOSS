@@ -33,7 +33,6 @@ const renderer = new PianoRoll(roll);
 let score: Score | null = null;
 let practice: LivePractice | null = null;
 let source: FrameSource | null = null;
-let raf = 0;
 
 // ---- backend badge ---------------------------------------------------------
 (async () => {
@@ -172,8 +171,11 @@ function transportButtons(running: boolean): void {
 }
 function setMic(msg: string): void { $("micState").textContent = msg; }
 
+let starting = false;
+
 async function startPractice(useMic: boolean): Promise<void> {
-  if (!score) return;
+  if (!score || starting) return; // re-entrancy guard (e.g. double-click)
+  starting = true;
   stopPractice();
   // Practice one hand (monophonic). "Both" defaults to the right-hand melody.
   let hand: "right" | "left" = selectedHand === "left" ? "left" : "right";
@@ -184,19 +186,22 @@ async function startPractice(useMic: boolean): Promise<void> {
   }
   practice = new LivePractice(practiceScore, callbacks);
   source = useMic ? new MicSource() : new SimSource(practiceScore, { bpm });
+  // Disable Listen/Simulate BEFORE awaiting the (possibly long) mic-permission
+  // prompt, so a second click can't spawn an orphaned, never-stopped MicSource.
+  transportButtons(true);
   try {
     setMic((useMic ? "requesting microphone… " : "simulating… ") + `(${hand} hand)`);
     await practice.start(source);
     setMic(`${source.label} · ${hand} hand`);
-    transportButtons(true);
   } catch (e) {
     setMic((e as Error).message);
-    transportButtons(false);
+    stopPractice(); // release the failed source
+  } finally {
+    starting = false;
   }
 }
 
 function stopPractice(): void {
-  if (raf) cancelAnimationFrame(raf);
   practice?.stop();
   source?.stop();
   practice = null;

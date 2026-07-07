@@ -102,7 +102,9 @@ export function computePlayOrder(infos: MeasureRepeatInfo[]): number[] {
         continue;
       }
       // Repeat exhausted; fall through to the next measure and reset section.
-      repeatStart = i + 1 < infos.length && infos[i + 1].forwardRepeat ? i + 1 : i + 1;
+      // (The next measure becomes the default section start; if it carries its
+      // own forward-repeat, the top-of-loop handler re-sets repeatStart anyway.)
+      repeatStart = i + 1;
       pass = 1;
     }
 
