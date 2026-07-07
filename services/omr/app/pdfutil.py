@@ -2,8 +2,8 @@
 
 Long scores are split into single-page PDFs so each page can be OMR'd
 independently, keeping the JVM heap footprint bounded on the modest backend
-machine. Merging the per-page MusicXML back into one part-coherent score is
-non-trivial and is intentionally out of scope for this demo (see README).
+machine. The per-page MusicXML is then stitched back into one continuous score
+by mxlmerge.merge_musicxml (wired up in audiveris.run_omr_paged).
 """
 from __future__ import annotations
 

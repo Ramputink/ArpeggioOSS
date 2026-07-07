@@ -3,8 +3,8 @@
  *
  * Given the barline/ending information collected per measure, this produces the
  * sequence of measure indices in the order they are actually performed. Forward
- * and backward repeats and first/second endings (voltas) are supported; da capo
- * / dal segno jumps are best-effort and documented as a limitation.
+ * and backward repeats and first/second endings (voltas) are supported, as well
+ * as da capo / dal segno navigation with coda and fine markers.
  */
 
 /** Repeat-related flags extracted from a measure's barlines. */
@@ -17,6 +17,18 @@ export interface MeasureRepeatInfo {
   repeatTimes: number;
   /** Ending (volta) numbers that start at this measure, e.g. [1] or [2]. */
   endingStart: number[] | null;
+  /** This measure is a segno point (the target of a dal-segno jump). */
+  segno: boolean;
+  /** This measure is a coda point (the target of a to-coda jump). */
+  coda: boolean;
+  /** At the end of this measure, jump back to the beginning (da capo). */
+  dacapo: boolean;
+  /** At the end of this measure, jump back to the segno (dal segno). */
+  dalsegno: boolean;
+  /** On the D.C./D.S. return pass, jump from here to the coda point. */
+  toCoda: boolean;
+  /** On the D.C./D.S. return pass, stop after playing this measure (fine). */
+  fine: boolean;
 }
 
 /**
@@ -32,7 +44,16 @@ export function computePlayOrder(infos: MeasureRepeatInfo[]): number[] {
   let repeatStart = 0;
   let pass = 1; // which pass through the current repeated section we are on
 
-  // Safety bound: repeats can't legitimately expand beyond this many measures.
+  // Navigation (D.C./D.S./coda/fine) state. Each jump fires at most once, and
+  // the fine/to-coda markers only take effect on the "return" pass a D.C. or
+  // D.S. jump triggers (they are ignored on the way there).
+  const segnoIndex = infos.findIndex((m) => m.segno);
+  const codaIndex = infos.findIndex((m) => m.coda);
+  const navDone = new Set<number>(); // indices of D.C./D.S. jumps already taken
+  let navReturn = false; // true once a D.C./D.S. jump has been taken
+  let codaJumpDone = false;
+
+  // Safety bound: repeats/navigation can't legitimately expand beyond this.
   const maxSteps = infos.length * 64 + 1000;
   let steps = 0;
 
@@ -40,7 +61,9 @@ export function computePlayOrder(infos: MeasureRepeatInfo[]): number[] {
     if (steps++ > maxSteps) break; // guard against pathological/broken input
     const m = infos[i];
 
-    if (m.forwardRepeat && i !== repeatStart) {
+    // On a D.C./D.S. return pass the source is replayed straight through, so
+    // section repeats and voltas are not re-evaluated.
+    if (!navReturn && m.forwardRepeat && i !== repeatStart) {
       // Entering a fresh repeated section.
       repeatStart = i;
       pass = 1;
@@ -48,7 +71,7 @@ export function computePlayOrder(infos: MeasureRepeatInfo[]): number[] {
 
     // Volta handling: if this measure opens an ending that does not apply on the
     // current pass, skip forward to the ending that does (or stop if none).
-    if (m.endingStart && !m.endingStart.includes(pass)) {
+    if (!navReturn && m.endingStart && !m.endingStart.includes(pass)) {
       let j = i + 1;
       while (j < infos.length && !infos[j].endingStart?.includes(pass)) j++;
       if (j < infos.length) {
@@ -60,7 +83,17 @@ export function computePlayOrder(infos: MeasureRepeatInfo[]): number[] {
 
     order.push(i);
 
-    if (m.backwardRepeat) {
+    // Fine: on the return pass, stop after playing this measure.
+    if (navReturn && m.fine) break;
+
+    // To coda: on the return pass, jump from here to the coda point.
+    if (navReturn && m.toCoda && codaIndex >= 0 && !codaJumpDone) {
+      codaJumpDone = true;
+      i = codaIndex;
+      continue;
+    }
+
+    if (!navReturn && m.backwardRepeat) {
       const done = jumpsDone[i] ?? 0;
       if (done < m.repeatTimes - 1) {
         jumpsDone[i] = done + 1;
@@ -71,6 +104,21 @@ export function computePlayOrder(infos: MeasureRepeatInfo[]): number[] {
       // Repeat exhausted; fall through to the next measure and reset section.
       repeatStart = i + 1 < infos.length && infos[i + 1].forwardRepeat ? i + 1 : i + 1;
       pass = 1;
+    }
+
+    // Da capo / dal segno: take the jump once, then honor fine/to-coda markers
+    // on the way back.
+    if (m.dacapo && !navDone.has(i)) {
+      navDone.add(i);
+      navReturn = true;
+      i = 0;
+      continue;
+    }
+    if (m.dalsegno && !navDone.has(i)) {
+      navDone.add(i);
+      navReturn = true;
+      i = segnoIndex >= 0 ? segnoIndex : 0;
+      continue;
     }
 
     i++;

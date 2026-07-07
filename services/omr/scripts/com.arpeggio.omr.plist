@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd LaunchAgent for the Arpeggio OMR service (macOS 11 Big Sur backend).
+
+  User-level agent (no sudo): it starts the native uvicorn service at login and
+  keeps it alive across crashes/logout/reboot. install-launchagent.sh copies this
+  file to ~/Library/LaunchAgents/ and substitutes the __HOME__ placeholder with
+  the real absolute home path (launchd does NOT expand ~ or $HOME in paths).
+
+  It simply execs scripts/run-native.sh, which sources .native/env.sh (JAVA_HOME,
+  AUDIVERIS_CMD, VENV_DIR, TESSDATA_PREFIX, OMR_DISABLE_OCR) and starts uvicorn.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.arpeggio.omr</string>
+
+    <!-- Run run-native.sh under bash; __HOME__ is replaced by the installer. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>__HOME__/arpeggio/omr/scripts/run-native.sh</string>
+    </array>
+
+    <!-- Anchor the working directory at the service dir for good measure. -->
+    <key>WorkingDirectory</key>
+    <string>__HOME__/arpeggio/omr</string>
+
+    <!-- Start at login/boot and restart automatically if the process exits. -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Wait at least 10s between (re)launches to avoid crash-loop hammering. -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <!-- Capture stdout/stderr into the same log the manual start uses. -->
+    <key>StandardOutPath</key>
+    <string>__HOME__/arpeggio/service.log</string>
+    <key>StandardErrorPath</key>
+    <string>__HOME__/arpeggio/service.log</string>
+</dict>
+</plist>

@@ -6,11 +6,13 @@
  * `<chord>` are handled correctly, computes each note's onset in quarter-note
  * beats, expands repeats/voltas into a linear timeline, and merges tied notes.
  *
+ * Supports both `score-partwise` and `score-timewise`; the timewise layout is
+ * transposed into the same per-part measure structure before processing.
+ * Forward/backward repeats, voltas and da capo / dal segno navigation (with
+ * coda and fine markers) are expanded into the linear timeline.
+ *
  * Known limitations (acceptable for the OMR demo, documented in the README):
- *  - `score-timewise` is not supported (rare; MuseScore/IMSLP export partwise).
  *  - Grace notes are skipped (they carry no `<duration>`).
- *  - Da capo / dal segno jumps are not expanded (only forward/backward repeats
- *    and first/second endings).
  */
 import { XMLParser } from "fast-xml-parser";
 
@@ -120,11 +122,26 @@ function parseMeasure(
     backwardRepeat: false,
     repeatTimes: 2,
     endingStart: null,
+    segno: false,
+    coda: false,
+    dacapo: false,
+    dalsegno: false,
+    toCoda: false,
+    fine: false,
   };
 
+  // Read tempo and navigation markers from a `<sound>` element. In MusicXML the
+  // `segno`/`coda` attributes mark jump *targets* while `dalsegno`/`tocoda`/
+  // `dacapo`/`fine` are the *instructions*.
   const readSound = (node: PNode) => {
     const t = attr(node, "tempo");
     if (t !== undefined) tempo = parseFloat(t);
+    if (attr(node, "segno") !== undefined) repeat.segno = true;
+    if (attr(node, "coda") !== undefined) repeat.coda = true;
+    if (attr(node, "dacapo") === "yes") repeat.dacapo = true;
+    if (attr(node, "dalsegno") !== undefined) repeat.dalsegno = true;
+    if (attr(node, "tocoda") !== undefined) repeat.toCoda = true;
+    if (attr(node, "fine") === "yes") repeat.fine = true;
   };
 
   for (const child of kids(measureNode)) {
@@ -196,6 +213,12 @@ function parseMeasure(
       case "direction": {
         const sound = findChild(child, "sound");
         if (sound) readSound(sound);
+        // Some encoders mark a segno/coda point with only the visual symbol.
+        const dtype = findChild(child, "direction-type");
+        if (dtype) {
+          if (findChild(dtype, "segno")) repeat.segno = true;
+          if (findChild(dtype, "coda")) repeat.coda = true;
+        }
         break;
       }
       case "sound": {
@@ -255,6 +278,40 @@ function parsePart(partNode: PNode): RawPart {
 }
 
 /**
+ * Transpose a `<score-timewise>` root into per-part measure lists.
+ *
+ * Timewise nests `<part>` inside each `<measure>`; the inner `<part>` node has
+ * exactly the same child shape a partwise `<measure>` does, so we can feed it
+ * straight to {@link parseMeasure}. The result matches what {@link parsePart}
+ * produces for partwise input, leaving the rest of the pipeline unchanged.
+ */
+function parsePartsTimewise(root: PNode): RawPart[] {
+  const measuresByPart = new Map<string, RawMeasure[]>();
+  const divisionsByPart = new Map<string, number>();
+  const order: string[] = [];
+
+  let idx = 0;
+  for (const measureNode of findChildren(root, "measure")) {
+    idx += 1;
+    const numAttr = attr(measureNode, "number");
+    const number = numAttr !== undefined ? parseInt(numAttr, 10) || idx : idx;
+    for (const partNode of findChildren(measureNode, "part")) {
+      const id = attr(partNode, "id") ?? "P?";
+      if (!measuresByPart.has(id)) {
+        measuresByPart.set(id, []);
+        order.push(id);
+      }
+      const divisions = divisionsByPart.get(id) ?? 1;
+      const parsed = parseMeasure(partNode, number, divisions);
+      divisionsByPart.set(id, parsed.divisions); // carry forward across measures
+      measuresByPart.get(id)!.push(parsed);
+    }
+  }
+
+  return order.map((id) => ({ id, measures: measuresByPart.get(id)! }));
+}
+
+/**
  * Parse a MusicXML string into the canonical {@link Score} model, with repeats
  * expanded to a linear timeline and tied notes merged.
  */
@@ -267,16 +324,20 @@ export function parseMusicXML(xml: string): Score {
   });
   const tree: PNode[] = parser.parse(xml);
 
-  // Locate <score-partwise> at the document root.
-  const root = tree.find((n) => nameOf(n) === "score-partwise");
-  if (!root) {
-    if (tree.find((n) => nameOf(n) === "score-timewise")) {
-      throw new Error("score-timewise MusicXML is not supported; convert to partwise.");
-    }
-    throw new Error("No <score-partwise> element found; not a MusicXML document.");
-  }
+  // Locate the score root; both partwise and timewise layouts are supported.
+  const partwiseRoot = tree.find((n) => nameOf(n) === "score-partwise");
+  const timewiseRoot = tree.find((n) => nameOf(n) === "score-timewise");
 
-  const parts = findChildren(root, "part").map(parsePart);
+  let parts: RawPart[];
+  if (partwiseRoot) {
+    parts = findChildren(partwiseRoot, "part").map(parsePart);
+  } else if (timewiseRoot) {
+    parts = parsePartsTimewise(timewiseRoot);
+  } else {
+    throw new Error(
+      "No <score-partwise> or <score-timewise> element found; not a MusicXML document.",
+    );
+  }
   if (parts.length === 0) throw new Error("MusicXML has no <part> elements.");
 
   // Repeat structure is taken from the part with the most measures (usually all

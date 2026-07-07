@@ -7,7 +7,7 @@ POST /omr     -> accept an image/PDF score, return MusicXML.
 
 The full request flow is:
 
-    upload -> (optional) OpenCV preprocessing -> Audiveris batch OMR -> MusicXML
+    upload -> (optional) Pillow preprocessing -> Audiveris batch OMR -> MusicXML
 
 Everything runs on the backend machine (an old Intel MacBook on the LAN); the
 service binds 0.0.0.0 so the dev machine and, later, the iPhone can reach it.
@@ -49,7 +49,7 @@ async def omr(
     do_preprocess: bool = Query(
         True,
         alias="preprocess",
-        description="Run OpenCV preprocessing (deskew/crop/binarize/300dpi) before OMR.",
+        description="Run image preprocessing (deskew/crop/binarize/300dpi) before OMR.",
     ),
 ) -> PlainTextResponse:
     """Recognize an uploaded score and return MusicXML as plain text.
@@ -88,24 +88,20 @@ async def omr(
             omr_input = upload_path
             n_pages = pdfutil.page_count(upload_path) if ext == ".pdf" else 1
 
-        # 3. Guard against very long PDFs; page-by-page mode is documented as a
-        #    known limitation for this demo (we still OMR the whole book, but we
-        #    warn so the caller knows memory pressure is possible).
-        if n_pages > config.MAX_PAGES:
-            # Soft warning via header rather than failing the request.
-            headers = {"X-OMR-Warning": f"{n_pages} pages exceeds MAX_PAGES="
-                                        f"{config.MAX_PAGES}; memory pressure possible."}
-        else:
-            headers = {}
-
-        # 4. Run Audiveris.
+        # 3. Run Audiveris. Long PDFs are OMR'd page by page and merged, so the
+        #    JVM only ever holds one page at a time; short inputs take the
+        #    single-shot path. A PDF is required to split, so paging only applies
+        #    when omr_input is actually a PDF (always true after preprocessing).
         output_dir = os.path.join(job_dir, "out")
-        musicxml = audiveris.run_omr(omr_input, output_dir)
+        is_pdf = os.path.splitext(omr_input)[1].lower() == ".pdf"
+        if is_pdf and n_pages > config.MAX_PAGES:
+            musicxml = audiveris.run_omr_paged(omr_input, output_dir)
+        else:
+            musicxml = audiveris.run_omr(omr_input, output_dir)
 
         return PlainTextResponse(
             content=musicxml,
             media_type="application/vnd.recordare.musicxml+xml",
-            headers=headers,
         )
     except audiveris.AudiverisError as e:
         raise HTTPException(status_code=422, detail=str(e))

@@ -93,6 +93,40 @@ curl http://192.168.0.23:8000/health
 > On newer macOS with Homebrew, `scripts/install-native.sh` is the simpler
 > equivalent (`brew install openjdk@25 tesseract python`).
 
+#### Auto-start on boot (launchd LaunchAgent)
+
+The `nohup … &` start above dies on logout and doesn't come back after a reboot.
+To keep the service running permanently, install the bundled **launchd
+LaunchAgent** — a user-level agent (no sudo, everything stays under `~/arpeggio`):
+
+```bash
+ssh matveypro@192.168.0.23 'cd ~/arpeggio/omr && bash scripts/install-launchagent.sh'
+```
+
+This copies `scripts/com.arpeggio.omr.plist` into `~/Library/LaunchAgents/`
+(substituting the real home path for the `__HOME__` placeholder, since launchd
+does not expand `~`) and loads it. With `RunAtLoad` + `KeepAlive`, the service
+now **starts at every login/reboot and restarts automatically if it crashes**,
+logging to `~/arpeggio/service.log` (same file as the manual start). It requires
+`scripts/install-native-nobrew.sh` to have run first — the installer errors out
+if `~/arpeggio/omr/.native/env.sh` is missing.
+
+Check status or tail the log:
+
+```bash
+ssh matveypro@192.168.0.23 'launchctl print gui/$(id -u)/com.arpeggio.omr'
+ssh matveypro@192.168.0.23 'launchctl list | grep arpeggio'
+ssh matveypro@192.168.0.23 'tail -f ~/arpeggio/service.log'
+```
+
+Stop and uninstall (unloads the agent and removes the plist):
+
+```bash
+ssh matveypro@192.168.0.23 'cd ~/arpeggio/omr && bash scripts/install-launchagent.sh uninstall'
+# or manually:
+ssh matveypro@192.168.0.23 'launchctl bootout gui/$(id -u)/com.arpeggio.omr'
+```
+
 A healthy service responds:
 
 ```json
