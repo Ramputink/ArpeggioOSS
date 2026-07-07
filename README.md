@@ -21,7 +21,7 @@ exercises the whole thing end-to-end.
 
 | Path | What it is | Language |
 |------|-----------|----------|
-| `services/omr/` | HTTP OMR service: preprocessing + Audiveris wrapper. Deploys to the Intel Mac. | Python (FastAPI, OpenCV) |
+| `services/omr/` | HTTP OMR service: preprocessing + Audiveris wrapper. Deploys to the Intel Mac. | Python (FastAPI, Pillow) |
 | `services/omr/Dockerfile` · `docker-compose.yml` | Containerized deployment (x86_64). | — |
 | `services/omr/scripts/` | Native (no-Docker) install/run scripts for macOS. | Bash |
 | `packages/musicxml-parser/` | MusicXML → internal model + quality report. | TypeScript |
@@ -30,11 +30,15 @@ exercises the whole thing end-to-end.
 
 ## Component versions (verified July 2026)
 
-- **Audiveris 5.10.2** — needs **JDK 25**, built with Gradle 8.5. Batch CLI:
+- **Audiveris 5.10.2** — needs **JDK 25** (it compiles at Java source release 25),
+  built with Gradle 8.5. Batch CLI:
   `Audiveris -batch -export -output <dir> <input>` → compressed MusicXML (`.mxl`).
-- **Tesseract** — bundled by Audiveris via javacpp bindings; only the `eng`
-  `tessdata` language file is provided at runtime.
-- Target backend architecture: **linux/amd64** (the Intel MacBook).
+- **Tesseract** — bundled by Audiveris via javacpp bindings for text OCR. On the
+  Docker/Linux path the `eng` `tessdata` file is provided and OCR works. On the
+  **macOS 11 backend** the bundled native lib can't load, so OCR is disabled (see
+  "Backend on macOS 11" below); notes still export, only text is skipped.
+- **Preprocessing** uses **Pillow + NumPy** (not OpenCV), whose macOS 11 wheels load.
+- Target backend architecture: **x86_64** (the Intel MacBook, macOS 11 Big Sur).
 
 ---
 
@@ -66,23 +70,50 @@ ssh matveypro@192.168.0.23 'docker compose -f ~/arpeggio/omr/docker-compose.yml 
 curl http://192.168.0.23:8000/health
 ```
 
-### Option B — Native (when Docker Desktop is too heavy for the machine)
+### Option B — Native, no Homebrew (used on the macOS 11 backend)
 
-Requires [Homebrew](https://brew.sh). The installer pulls JDK 25 + Tesseract,
-builds Audiveris, and creates a Python virtualenv:
+The actual backend runs **macOS 11 (Big Sur)**, where Homebrew is unsupported and
+current Docker Desktop won't install. `install-native-nobrew.sh` provisions
+everything under `~/arpeggio` with **no sudo and no Homebrew**: Temurin JDK 25
+(tarball), Python 3.12 (via [`uv`](https://astral.sh/uv)), Tesseract `eng` data,
+and an Audiveris build from source.
 
 ```bash
-ssh matveypro@192.168.0.23 'cd ~/arpeggio/omr && bash scripts/install-native.sh'
-# Start it (foreground). For background use nohup/tmux, e.g.:
-ssh matveypro@192.168.0.23 'cd ~/arpeggio/omr && nohup bash scripts/run-native.sh > omr.log 2>&1 &'
+# One-time prerequisites the user runs on the Mac (need the login password):
+#   sudo xcodebuild -license accept          # unblocks system git/python3
+# Then, from the dev machine:
+rsync -az --exclude node_modules --exclude dist --exclude .native \
+  ./services/omr/ matveypro@192.168.0.23:~/arpeggio/omr/
+ssh matveypro@192.168.0.23 'cd ~/arpeggio/omr && nohup bash scripts/install-native-nobrew.sh > ~/arpeggio/provision.log 2>&1 &'
+# When provisioning finishes (~/arpeggio/omr/.native/env.sh appears), start it:
+ssh matveypro@192.168.0.23 'cd ~/arpeggio/omr && nohup bash scripts/run-native.sh > ~/arpeggio/service.log 2>&1 &'
 curl http://192.168.0.23:8000/health
 ```
+
+> On newer macOS with Homebrew, `scripts/install-native.sh` is the simpler
+> equivalent (`brew install openjdk@25 tesseract python`).
 
 A healthy service responds:
 
 ```json
 { "status": "ok", "service": "arpeggio-omr", "audiveris_version": "5.10.2" }
 ```
+
+### Backend on macOS 11 (Big Sur) — native-binary notes
+
+macOS 11 predates the 2026 prebuilt native binaries, which target macOS 12/13+.
+Three consequences, all handled:
+
+- **OpenCV** wheels fail to load (a bundled lib is built for macOS 12) → preprocessing
+  uses **Pillow + NumPy** instead.
+- **Audiveris' bundled Tesseract** native lib is built for macOS 13 and aborts the
+  engine → OCR is disabled with `OMR_DISABLE_OCR=true`
+  (passes `-constant …TesseractOCR.useOCR=false`). Note recognition is unaffected;
+  only text/lyrics OCR is skipped.
+- **JDK/Python**: the system JDK 17 / Python 3.8 are too old, so JDK 25 and
+  Python 3.12 are installed in userland.
+
+The Docker path (Debian, linux/amd64) has none of these issues and keeps OCR on.
 
 ### Service configuration (env vars)
 
@@ -92,6 +123,7 @@ A healthy service responds:
 | `OMR_JVM_HEAP` | `2g` | JVM heap cap for Audiveris (bound RAM on the old Mac). |
 | `OMR_TARGET_DPI` | `300` | DPI after preprocessing normalization. |
 | `OMR_MAX_PAGES` | `12` | Warn/guard threshold for long PDFs. |
+| `OMR_DISABLE_OCR` | `false` | Skip Audiveris OCR (set `true` on macOS 11). |
 | `AUDIVERIS_CMD` | (set by Docker/native) | Path to the Audiveris launcher. |
 | `TESSDATA_PREFIX` | (set by Docker/native) | Tesseract language-data dir. |
 
@@ -114,12 +146,12 @@ Multipart upload of a score; returns MusicXML as `text`
 Errors: `415` unsupported type, `400` empty/bad input, `422` Audiveris failed or
 score unrecognizable.
 
-Preprocessing (`services/omr/app/preprocess.py`): grayscale → deskew (±15° via
-min-area rect) → autocrop to content bbox → adaptive binarization → normalize to
-~300 dpi, recombined into a clean PDF so Audiveris treats multipage input as one
-coherent "book". Long PDFs (> `OMR_MAX_PAGES`) still process but return a
-`X-OMR-Warning` header; per-page MusicXML merging is a documented demo
-limitation (see below).
+Preprocessing (`services/omr/app/preprocess.py`, Pillow + NumPy): grayscale →
+deskew (±8° via projection-profile search) → autocrop to content bbox → adaptive
+mean binarization → normalize to ~300 dpi, recombined into a clean PDF (PyMuPDF)
+so Audiveris treats multipage input as one coherent "book". Long PDFs
+(> `OMR_MAX_PAGES`) still process but return a `X-OMR-Warning` header; per-page
+MusicXML merging is a documented demo limitation (see below).
 
 ---
 
@@ -132,8 +164,10 @@ npm install
 npm run build
 ```
 
-Run the client against a real score (the C-major Minuet BWV Anh. 114 by Petzold
-is public domain — export it from MuseScore/IMSLP as PDF, or photograph your own):
+Run the client against a real score. `samples/minueto.pdf` is included — the
+Minuet in G BWV Anh. 114 (Petzold), a clean LilyPond engraving from the
+[Mutopia Project](https://www.mutopiaproject.org) (public domain). You can also
+photograph your own or export from MuseScore/IMSLP:
 
 ```bash
 node packages/omr-client/dist/cli.js ./samples/minueto.pdf \
@@ -145,22 +179,28 @@ It POSTs the file, saves the MusicXML, parses it locally and prints a quality
 report:
 
 ```
-→ POST http://192.168.0.23:8000/omr  (742.0 KiB, preprocess=true)
-✓ received MusicXML in 18.4s (36.1 KiB)
+→ POST http://192.168.0.23:8000/omr  (176.5 KiB, preprocess=true)
+✓ received MusicXML in 24.6s (74.2 KiB)
 ✓ saved ./minueto.musicxml
 
 Parse quality report
 ─────────────────────
   Parts:      1
   Staves:     2
-  Voices:     2
+  Voices:     4
   Measures:   32
-  Notes:      196
-  Pitch range: MIDI 43–84
-  Duration:   96.0 quarter-beats
+  Notes:      408
+  Pitch range: MIDI 43–83
+  Duration:   194.0 quarter-beats
   Repeats flattened: yes
-  Warnings:   none 🎉
+  Warnings (2):
+    ! [voice-overlap] 4 overlapping note pair(s) within a single voice.
+    ! [measure-overfull] Measure 8 spans 4.00 beats but the time signature allows 3.00.
 ```
+
+(Real output from the deployed backend, OMR-ing the Mutopia engraving of the
+Minuet. The two warnings are exactly the kind of OMR slip the report exists to
+flag — a good sign the quality check works.)
 
 Other client modes:
 
