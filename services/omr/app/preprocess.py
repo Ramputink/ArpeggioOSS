@@ -3,96 +3,151 @@
 This is what improves optical music recognition the most: deskewing, cropping
 away margins (autocrop), binarizing, and normalizing resolution to ~300 dpi.
 
+Implemented with Pillow + NumPy (and PyMuPDF for PDF I/O) rather than OpenCV:
+the OpenCV x86_64 wheels bundle native libs built for newer macOS and fail to
+load on the Big Sur (macOS 11) backend. Pillow/NumPy have no such issue.
+
 Supported inputs: a single image (PNG/JPG/TIFF/BMP) or a PDF. In both cases the
 output is a clean one-or-many-page PDF, so Audiveris treats it as a coherent
 "book".
 """
 from __future__ import annotations
 
+import io
 import os
 from typing import List
 
-import cv2
 import fitz  # PyMuPDF
 import numpy as np
+from PIL import Image
 
 from . import config
 
 
 # ---------------------------------------------------------------------------
-# Single-page operations (numpy BGR/GRAY arrays)
+# Single-page operations (grayscale uint8 numpy arrays)
 # ---------------------------------------------------------------------------
-def _to_gray(img: np.ndarray) -> np.ndarray:
-    if img.ndim == 3:
-        return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    return img
+def _otsu_threshold(gray: np.ndarray) -> int:
+    """Classic Otsu global threshold on an 8-bit grayscale image."""
+    hist = np.bincount(gray.ravel(), minlength=256).astype(np.float64)
+    total = gray.size
+    sum_all = float(np.dot(np.arange(256), hist))
+    w_b = 0.0
+    sum_b = 0.0
+    max_var = -1.0
+    threshold = 127
+    for t in range(256):
+        w_b += hist[t]
+        if w_b == 0:
+            continue
+        w_f = total - w_b
+        if w_f == 0:
+            break
+        sum_b += t * hist[t]
+        m_b = sum_b / w_b
+        m_f = (sum_all - sum_b) / w_f
+        between = w_b * w_f * (m_b - m_f) ** 2
+        # `>=` so a perfectly bimodal image (a clean black/white scan, where every
+        # threshold in [0, 254] scores equally) resolves to the highest usable
+        # threshold rather than 0 — otherwise the ink mask would come out empty.
+        if between >= max_var:
+            max_var = between
+            threshold = t
+    return threshold
 
 
 def _deskew(gray: np.ndarray) -> np.ndarray:
-    """Straighten the page by estimating the dominant angle of the dark content.
+    """Straighten the page via a projection-profile search.
 
-    Uses the minimum-area rectangle over the ink pixels. The correction is
-    clamped to +/-15 degrees so we never over-rotate pages that are already
-    straight or too noisy to estimate reliably.
+    Music staves are strongly horizontal, so the rotation whose row-sum profile
+    has the highest variance (sharpest lines) is the one that levels them. The
+    search runs on a downscaled ink mask for speed and is clamped to +/-8 deg.
     """
-    # Ink = dark pixels. Invert so the content becomes the foreground.
-    thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
-    coords = np.column_stack(np.where(thresh > 0))
-    if coords.shape[0] < 50:  # essentially blank: leave untouched
+    thr = _otsu_threshold(gray)
+    ink = (gray < thr).astype(np.uint8) * 255
+    if int(ink.sum()) < 50 * 255:  # essentially blank
         return gray
-    angle = cv2.minAreaRect(coords)[-1]
-    # minAreaRect returns an angle in (-90, 0]; normalize to a small rotation.
-    if angle < -45:
-        angle = 90 + angle
-    if abs(angle) < 0.2 or abs(angle) > 15:
-        return gray  # already straight, or estimate not trustworthy
-    h, w = gray.shape
-    m = cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
-    return cv2.warpAffine(
-        gray, m, (w, h), flags=cv2.INTER_CUBIC,
-        borderMode=cv2.BORDER_REPLICATE,
+
+    mask = Image.fromarray(ink)
+    # Downscale the search image so 33 rotations stay cheap on 300-dpi pages.
+    longest = max(mask.size)
+    if longest > 900:
+        s = 900.0 / longest
+        mask = mask.resize((max(1, int(mask.size[0] * s)), max(1, int(mask.size[1] * s))))
+
+    best_angle = 0.0
+    best_score = -1.0
+    for angle in np.arange(-8.0, 8.0001, 0.5):
+        rot = mask.rotate(float(angle), resample=Image.BILINEAR, fillcolor=0)
+        rows = np.asarray(rot, dtype=np.float32).sum(axis=1)
+        score = float(np.var(rows))
+        if score > best_score:
+            best_score = score
+            best_angle = float(angle)
+
+    if abs(best_angle) < 0.25:
+        return gray  # already straight
+    rotated = Image.fromarray(gray).rotate(
+        best_angle, resample=Image.BICUBIC, fillcolor=255
     )
+    return np.asarray(rotated)
 
 
 def _autocrop(gray: np.ndarray, margin: int = 40) -> np.ndarray:
     """Crop to the content bounding box, leaving a small white margin."""
-    thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
-    coords = cv2.findNonZero(thresh)
-    if coords is None:
+    thr = _otsu_threshold(gray)
+    # Bounding box of the ink (dark) pixels.
+    ink = Image.fromarray((gray < thr).astype(np.uint8) * 255)
+    bbox = ink.getbbox()
+    if bbox is None:
         return gray
-    x, y, w, h = cv2.boundingRect(coords)
-    H, W = gray.shape
-    x0 = max(0, x - margin)
-    y0 = max(0, y - margin)
-    x1 = min(W, x + w + margin)
-    y1 = min(H, y + h + margin)
+    x0, y0, x1, y1 = bbox
+    h, w = gray.shape
+    x0 = max(0, x0 - margin)
+    y0 = max(0, y0 - margin)
+    x1 = min(w, x1 + margin)
+    y1 = min(h, y1 + margin)
     return gray[y0:y1, x0:x1]
 
 
-def _binarize(gray: np.ndarray) -> np.ndarray:
-    """Binarize. Adaptive thresholding copes better with uneven photo lighting."""
-    return cv2.adaptiveThreshold(
-        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY,
-        blockSize=31, C=15,
-    )
+def _binarize_adaptive(gray: np.ndarray, block: int = 31, c: int = 15) -> np.ndarray:
+    """Adaptive mean threshold (like OpenCV's ADAPTIVE_THRESH_MEAN_C).
+
+    Uses an integral image so each pixel's local mean is an O(1) lookup; copes
+    with the uneven lighting typical of phone photos better than a global Otsu.
+    """
+    g = gray.astype(np.float64)
+    h, w = g.shape
+    integral = np.pad(g, ((1, 0), (1, 0)), mode="constant").cumsum(0).cumsum(1)
+    r = block // 2
+
+    ys = np.arange(h)
+    xs = np.arange(w)
+    y0 = np.clip(ys - r, 0, h)[:, None]
+    y1 = np.clip(ys + r + 1, 0, h)[:, None]
+    x0 = np.clip(xs - r, 0, w)[None, :]
+    x1 = np.clip(xs + r + 1, 0, w)[None, :]
+
+    area = (y1 - y0) * (x1 - x0)
+    total = integral[y1, x1] - integral[y0, x1] - integral[y1, x0] + integral[y0, x0]
+    local_mean = total / area
+    out = np.where(g < (local_mean - c), 0, 255).astype(np.uint8)
+    return out
 
 
-def preprocess_page(img: np.ndarray) -> np.ndarray:
-    """Full per-page pipeline: gray -> deskew -> autocrop -> binarize."""
-    gray = _to_gray(img)
+def preprocess_page(gray: np.ndarray) -> np.ndarray:
+    """Full per-page pipeline on a grayscale array: deskew -> autocrop -> binarize."""
     gray = _deskew(gray)
     gray = _autocrop(gray)
-    return _binarize(gray)
+    return _binarize_adaptive(gray)
 
 
 # ---------------------------------------------------------------------------
-# Loading pages from the different input formats
+# Loading pages from the different input formats (always -> grayscale arrays)
 # ---------------------------------------------------------------------------
 def _load_image_pages(path: str) -> List[np.ndarray]:
-    img = cv2.imread(path, cv2.IMREAD_COLOR)
-    if img is None:
-        raise ValueError(f"Could not read image: {path}")
-    return [img]
+    with Image.open(path) as img:
+        return [np.asarray(img.convert("L"))]
 
 
 def _load_pdf_pages(path: str, dpi: int) -> List[np.ndarray]:
@@ -116,20 +171,17 @@ def _load_pdf_pages(path: str, dpi: int) -> List[np.ndarray]:
 def _pages_to_pdf(pages: List[np.ndarray], out_pdf: str, dpi: int) -> None:
     """Save a list of binarized pages as a single PDF at `dpi`.
 
-    Uses PyMuPDF (already a dependency for rasterization) rather than img2pdf, so
-    we avoid the pikepdf/qpdf build chain that has no wheel on the macOS 11
-    backend. Each page is sized so its pixels resolve at exactly `dpi`, keeping
-    the physical scale correct for Audiveris.
+    Uses PyMuPDF so we avoid extra PDF-writing dependencies. Each page is sized
+    so its pixels resolve at exactly `dpi`, keeping the physical scale correct
+    for Audiveris.
     """
     doc = fitz.open()
     try:
         for page in pages:
-            ok, buf = cv2.imencode(".png", page)
-            if not ok:
-                raise RuntimeError("Failed to encode page to PNG")
-            png = buf.tobytes()
+            buf = io.BytesIO()
+            Image.fromarray(page).save(buf, format="PNG")
+            png = buf.getvalue()
             h_px, w_px = page.shape[:2]
-            # Convert pixel dimensions to PDF points (72 pt/inch) at target DPI.
             w_pt = w_px * 72.0 / dpi
             h_pt = h_px * 72.0 / dpi
             pdf_page = doc.new_page(width=w_pt, height=h_pt)
