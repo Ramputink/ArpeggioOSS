@@ -84,7 +84,7 @@ fi
 export PATH="${HOME}/.local/bin:${PATH}"
 echo "==> [5/6] Creating Python 3.12 venv"
 uv python install 3.12
-uv venv --python 3.12 "${VENV_DIR}"
+uv venv --clear --python 3.12 "${VENV_DIR}"
 uv pip install --python "${VENV_DIR}/bin/python" -r "${SERVICE_DIR}/requirements.txt"
 
 # 5. Emit env file for run-native.sh ----------------------------------------
