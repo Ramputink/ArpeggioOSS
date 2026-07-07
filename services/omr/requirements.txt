@@ -1,0 +1,11 @@
+# Arpeggio OMR service — Python dependencies
+# Pinned to majors known to work with Python 3.11+ (Docker) and 3.12 (Homebrew).
+
+fastapi==0.115.6          # HTTP framework
+uvicorn[standard]==0.34.0 # ASGI server
+python-multipart==0.0.20  # multipart/form-data uploads for FastAPI
+
+opencv-python-headless==4.11.0.86  # image preprocessing (no GUI deps)
+numpy==2.2.1
+PyMuPDF==1.25.2           # PDF rasterization + page splitting (imported as `fitz`)
+img2pdf==0.6.0            # recombine clean pages into a single PDF for Audiveris

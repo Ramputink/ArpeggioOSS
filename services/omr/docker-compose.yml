@@ -1,0 +1,31 @@
+# Arpeggio OMR service — Docker Compose for the Intel Mac backend.
+#
+#   docker compose up -d --build      # build + start in the background
+#   docker compose logs -f            # follow logs
+#   docker compose down               # stop
+#
+services:
+  omr:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: arpeggio-omr:5.10.2
+    container_name: arpeggio-omr
+    # Bind to 0.0.0.0 on the host so dev machine / iPhone can reach it on the LAN.
+    ports:
+      - "8000:8000"
+    environment:
+      # Keep the JVM heap below the container limit to avoid OOM kills.
+      OMR_JVM_HEAP: "2g"
+      OMR_MAX_PAGES: "12"
+      OMR_TARGET_DPI: "300"
+    # Hard memory ceiling for the whole container (JVM heap + Python + native).
+    mem_limit: 3g
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c",
+             "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:8000/health').status==200 else sys.exit(1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

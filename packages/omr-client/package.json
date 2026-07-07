@@ -1,0 +1,23 @@
+{
+  "name": "@arpeggio/omr-client",
+  "version": "0.1.0",
+  "description": "CLI client: upload a score to the Arpeggio OMR service, save the MusicXML, parse it and print a quality report.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "bin": {
+    "omr-client": "./dist/cli.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "@arpeggio/musicxml-parser": "0.1.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "@types/node": "^20.17.0"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "arpeggio-oss",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Arpeggio OSS — OMR backend demo: sheet music -> MusicXML -> internal model. Piano tutor pipeline (Phase 1).",
+  "license": "AGPL-3.0-or-later",
+  "workspaces": [
+    "packages/musicxml-parser",
+    "packages/omr-client"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm test --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
