@@ -28,6 +28,13 @@ JVM_HEAP: str = os.environ.get("OMR_JVM_HEAP", "2g")
 # Timeout (seconds) for a single Audiveris run on one input file.
 AUDIVERIS_TIMEOUT: int = int(os.environ.get("OMR_AUDIVERIS_TIMEOUT", "600"))
 
+# Disable Audiveris' OCR (text recognition) when the bundled Tesseract native
+# library can't load — e.g. on macOS 11 (Big Sur), whose libc++ is too old for
+# the 2026 javacpp Tesseract build. With OCR off, Audiveris still recognizes
+# notes/clefs/keys/time signatures and exports MusicXML; only textual items
+# (title, lyrics, tempo words) are skipped, which the note model doesn't use.
+DISABLE_OCR: bool = os.environ.get("OMR_DISABLE_OCR", "false").lower() in ("1", "true", "yes")
+
 # ---- Preprocessing / PDF ---------------------------------------------------
 # Target DPI after normalization. ~300 dpi is what Audiveris digests best.
 TARGET_DPI: int = int(os.environ.get("OMR_TARGET_DPI", "300"))

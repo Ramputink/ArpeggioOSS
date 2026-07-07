@@ -97,6 +97,9 @@ export TESSDATA_PREFIX="${TESSDATA_PREFIX}"
 export AUDIVERIS_CMD="${AUDIVERIS_LAUNCHER}"
 export AUDIVERIS_VERSION="${AUDIVERIS_REF}"
 export VENV_DIR="${VENV_DIR}"
+# macOS 11's libc++ is too old for the bundled Tesseract native lib, so disable
+# OCR: Audiveris still recognizes notes and exports MusicXML (text is skipped).
+export OMR_DISABLE_OCR=true
 EOF
 
 echo "==> DONE. Start with: bash scripts/run-native.sh"

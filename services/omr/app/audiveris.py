@@ -86,8 +86,11 @@ def run_omr(input_path: str, output_dir: str) -> str:
     Raises AudiverisError on non-zero exit, timeout, or missing output.
     """
     os.makedirs(output_dir, exist_ok=True)
-    cmd = [
-        config.AUDIVERIS_CMD,
+    cmd = [config.AUDIVERIS_CMD]
+    if config.DISABLE_OCR:
+        # Prevents Audiveris from touching the (unloadable) Tesseract native lib.
+        cmd += ["-constant", "org.audiveris.omr.text.tesseract.TesseractOCR.useOCR=false"]
+    cmd += [
         "-batch",
         "-export",
         "-output", output_dir,
