@@ -6,7 +6,8 @@
   "license": "AGPL-3.0-or-later",
   "workspaces": [
     "packages/musicxml-parser",
-    "packages/omr-client"
+    "packages/omr-client",
+    "packages/practice-engine"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

@@ -1,0 +1,28 @@
+{
+  "name": "@arpeggio/practice-engine",
+  "version": "0.1.0",
+  "description": "On-device practice core for the piano tutor: note detection (MOTOR 1/2 + combiner), score following (follow-you + DTW), and the feedback/adaptation loops. Consumes the canonical Score from @arpeggio/musicxml-parser.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test --import tsx test/*.test.ts"
+  },
+  "dependencies": {
+    "@arpeggio/musicxml-parser": "0.1.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "@types/node": "^20.17.0"
+  }
+}

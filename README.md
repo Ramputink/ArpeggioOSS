@@ -26,7 +26,14 @@ exercises the whole thing end-to-end.
 | `services/omr/scripts/` | Native (no-Docker) install/run scripts for macOS. | Bash |
 | `packages/musicxml-parser/` | MusicXML → internal model + quality report. | TypeScript |
 | `packages/omr-client/` | CLI test client (upload, save, parse, report). | TypeScript |
+| `packages/practice-engine/` | On-device practice core: note detection + score following + feedback (Phases 4–6). | TypeScript |
+| `apps/viewer/` | Self-contained piano-roll viewer of the canonical model (Phase 2). | HTML |
 | `samples/demo.musicxml` | Tiny score for offline parser testing. | — |
+
+Beyond the OMR demo, the repo now includes the algorithmic core of the later
+roadmap phases (render, detection, score following, feedback) — all headless and
+unit-tested. See **[`docs/PHASES.md`](docs/PHASES.md)** for the full status map and
+how the pieces connect into the on-device practice loop.
 
 ## Component versions (verified July 2026)
 

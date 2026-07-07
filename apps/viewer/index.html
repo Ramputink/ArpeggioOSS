@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Arpeggio — Piano Roll Viewer</title>
+<style>
+  :root {
+    --bg: #0e1116; --panel: #161b22; --fg: #e6edf3; --muted: #8b949e;
+    --grid: #21262d; --rh: #2dd4bf; --lh: #a78bfa; --accent: #f0b429; --border: #30363d;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f6f8fa; --panel:#fff; --fg:#1f2328; --muted:#57606a;
+            --grid:#e7ebef; --rh:#0d9488; --lh:#7c3aed; --accent:#bf8700; --border:#d0d7de; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+         background:var(--bg); color:var(--fg); }
+  header { padding:14px 18px; border-bottom:1px solid var(--border); display:flex;
+           align-items:baseline; gap:14px; flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0; font-weight:650; }
+  header .meta { color:var(--muted); font-size:12.5px; }
+  .controls { display:flex; gap:10px; align-items:center; padding:10px 18px; flex-wrap:wrap;
+              border-bottom:1px solid var(--border); background:var(--panel); }
+  button { background:var(--panel); color:var(--fg); border:1px solid var(--border);
+           border-radius:7px; padding:6px 12px; cursor:pointer; font-size:13px; }
+  button:hover { border-color:var(--muted); }
+  button.primary { background:var(--rh); color:#03201c; border-color:transparent; font-weight:600; }
+  .seg { display:inline-flex; border:1px solid var(--border); border-radius:7px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; border-right:1px solid var(--border); }
+  .seg button:last-child { border-right:0; }
+  .seg button.on { background:var(--accent); color:#231a00; font-weight:600; }
+  label.rng { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12.5px; }
+  input[type=range] { accent-color:var(--rh); }
+  .legend { margin-left:auto; display:flex; gap:14px; color:var(--muted); font-size:12px; align-items:center; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:-1px; }
+  .wrap { padding:14px 18px; }
+  canvas { width:100%; height:auto; display:block; border:1px solid var(--border);
+           border-radius:10px; background:var(--panel); }
+  footer { color:var(--muted); font-size:12px; padding:6px 18px 18px; }
+  code { background:var(--grid); padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎹 Arpeggio — Piano Roll</h1>
+  <span class="meta" id="meta"></span>
+</header>
+<div class="controls">
+  <button class="primary" id="play">▶ Play</button>
+  <button id="restart">⭮ Restart</button>
+  <div class="seg" id="hands">
+    <button data-h="both" class="on">Both</button>
+    <button data-h="right">Right</button>
+    <button data-h="left">Left</button>
+  </div>
+  <label class="rng">Tempo <input type="range" id="tempo" min="30" max="180" value="100" />
+    <span id="bpm">100</span> BPM</label>
+  <label class="rng"><input type="checkbox" id="sound" checked /> Sound</label>
+  <div class="legend">
+    <span><span class="dot" style="background:var(--rh)"></span>Right hand</span>
+    <span><span class="dot" style="background:var(--lh)"></span>Left hand</span>
+  </div>
+</div>
+<div class="wrap"><canvas id="roll"></canvas></div>
+<footer>
+  Rendered from Arpeggio's canonical model (<code>@arpeggio/musicxml-parser</code>),
+  OMR'd by the backend from the Mutopia engraving of Minuet BWV Anh. 114.
+  Timing in quarter-note beats; playback is a self-contained WebAudio synth.
+</footer>
+
+<script>
+const DATA = {"meta":{"parts":1,"measures":32,"notes":408,"durationQuarters":194,"timeSignatures":[{"measure":1,"beats":3,"beatType":4}],"tempos":[]},"events":[{"on":0,"off":2,"midi":55,"hand":"left","staff":2,"voice":6,"m":1},{"on":0,"off":2,"midi":59,"hand":"left","staff":2,"voice":5,"m":1},{"on":0,"off":2,"midi":62,"hand":"left","staff":2,"voice":5,"m":1},{"on":0,"off":1,"midi":74,"hand":"right","staff":1,"voice":1,"m":1},{"on":1,"off":1.5,"midi":67,"hand":"right","staff":1,"voice":1,"m":1},{"on":1.5,"off":2,"midi":69,"hand":"right","staff":1,"voice":1,"m":1},{"on":2,"off":3,"midi":57,"hand":"left","staff":2,"voice":6,"m":1},{"on":2,"off":2.5,"midi":71,"hand":"right","staff":1,"voice":1,"m":1},{"on":2.5,"off":3,"midi":72,"hand":"right","staff":1,"voice":1,"m":1},{"on":3,"off":6,"midi":59,"hand":"left","staff":2,"voice":5,"m":2},{"on":3,"off":4,"midi":74,"hand":"right","staff":1,"voice":1,"m":2},{"on":4,"off":5,"midi":67,"hand":"right","staff":1,"voice":1,"m":2},{"on":5,"off":6,"midi":67,"hand":"right","staff":1,"voice":1,"m":2},{"on":6,"off":9,"midi":60,"hand":"left","staff":2,"voice":5,"m":3},{"on":6,"off":7,"midi":76,"hand":"right","staff":1,"voice":1,"m":3},{"on":7,"off":7.5,"midi":72,"hand":"right","staff":1,"voice":1,"m":3},{"on":7.5,"off":8,"midi":74,"hand":"right","staff":1,"voice":1,"m":3},{"on":8,"off":8.5,"midi":76,"hand":"right","staff":1,"voice":1,"m":3},{"on":8.5,"off":9,"midi":78,"hand":"right","staff":1,"voice":1,"m":3},{"on":9,"off":12,"midi":59,"hand":"left","staff":2,"voice":5,"m":4},{"on":9,"off":10,"midi":79,"hand":"right","staff":1,"voice":1,"m":4},{"on":10,"off":11,"midi":67,"hand":"right","staff":1,"voice":1,"m":4},{"on":11,"off":12,"midi":67,"hand":"right","staff":1,"voice":1,"m":4},{"on":12,"off":15,"midi":57,"hand":"left","staff":2,"voice":5,"m":5},{"on":12,"off":13,"midi":72,"hand":"right","staff":1,"voice":1,"m":5},{"on":13,"off":13.5,"midi":74,"hand":"right","staff":1,"voice":1,"m":5},{"on":13.5,"off":14,"midi":72,"hand":"right","staff":1,"voice":1,"m":5},{"on":14,"off":14.5,"midi":71,"hand":"right","staff":1,"voice":1,"m":5},{"on":14.5,"off":15,"midi":69,"hand":"right","staff":1,"voice":1,"m":5},{"on":15,"off":18,"midi":55,"hand":"left","staff":2,"voice":5,"m":6},{"on":15,"off":16,"midi":71,"hand":"right","staff":1,"voice":1,"m":6},{"on":16,"off":16.5,"midi":72,"hand":"right","staff":1,"voice":1,"m":6},{"on":16.5,"off":17,"midi":71,"hand":"right","staff":1,"voice":1,"m":6},{"on":17,"off":17.5,"midi":69,"hand":"right","staff":1,"voice":1,"m":6},{"on":17.5,"off":18,"midi":67,"hand":"right","staff":1,"voice":1,"m":6},{"on":18,"off":19,"midi":62,"hand":"left","staff":2,"voice":5,"m":7},{"on":18,"off":19,"midi":66,"hand":"right","staff":1,"voice":1,"m":7},{"on":19,"off":20,"midi":59,"hand":"left","staff":2,"voice":5,"m":7},{"on":19,"off":19.5,"midi":67,"hand":"right","staff":1,"voice":1,"m":7},{"on":19.5,"off":20,"midi":69,"hand":"right","staff":1,"voice":1,"m":7},{"on":20,"off":21,"midi":55,"hand":"left","staff":2,"voice":5,"m":7},{"on":20,"off":20.5,"midi":71,"hand":"right","staff":1,"voice":1,"m":7},{"on":20.5,"off":21,"midi":67,"hand":"right","staff":1,"voice":1,"m":7},{"on":21,"off":22,"midi":72,"hand":"right","staff":1,"voice":1,"m":8},{"on":22,"off":23,"midi":62,"hand":"left","staff":2,"voice":5,"m":8},{"on":22,"off":25,"midi":69,"hand":"right","staff":1,"voice":1,"m":8},{"on":23,"off":23.5,"midi":50,"hand":"left","staff":2,"voice":5,"m":8},{"on":23.5,"off":24,"midi":60,"hand":"left","staff":2,"voice":5,"m":8},{"on":24,"off":24.5,"midi":59,"hand":"left","staff":2,"voice":5,"m":8},{"on":24.5,"off":25,"midi":57,"hand":"left","staff":2,"voice":5,"m":8},{"on":25,"off":27,"midi":59,"hand":"left","staff":2,"voice":5,"m":9},{"on":25,"off":26,"midi":74,"hand":"right","staff":1,"voice":1,"m":9},{"on":26,"off":26.5,"midi":67,"hand":"right","staff":1,"voice":1,"m":9},{"on":26.5,"off":27,"midi":69,"hand":"right","staff":1,"voice":1,"m":9},{"on":27,"off":28,"midi":57,"hand":"left","staff":2,"voice":5,"m":9},{"on":27,"off":27.5,"midi":71,"hand":"right","staff":1,"voice":1,"m":9},{"on":27.5,"off":28,"midi":72,"hand":"right","staff":1,"voice":1,"m":9},{"on":28,"off":29,"midi":55,"hand":"left","staff":2,"voice":5,"m":10},{"on":28,"off":29,"midi":74,"hand":"right","staff":1,"voice":1,"m":10},{"on":29,"off":30,"midi":59,"hand":"left","staff":2,"voice":5,"m":10},{"on":29,"off":30,"midi":67,"hand":"right","staff":1,"voice":1,"m":10},{"on":30,"off":31,"midi":55,"hand":"left","staff":2,"voice":5,"m":10},{"on":30,"off":31,"midi":67,"hand":"right","staff":1,"voice":1,"m":10},{"on":31,"off":34,"midi":60,"hand":"left","staff":2,"voice":5,"m":11},{"on":31,"off":32,"midi":76,"hand":"right","staff":1,"voice":1,"m":11},{"on":32,"off":32.5,"midi":72,"hand":"right","staff":1,"voice":1,"m":11},{"on":32.5,"off":33,"midi":74,"hand":"right","staff":1,"voice":1,"m":11},{"on":33,"off":33.5,"midi":76,"hand":"right","staff":1,"voice":1,"m":11},{"on":33.5,"off":34,"midi":78,"hand":"right","staff":1,"voice":1,"m":11},{"on":34,"off":35,"midi":59,"hand":"left","staff":2,"voice":5,"m":12},{"on":34,"off":35,"midi":79,"hand":"right","staff":1,"voice":1,"m":12},{"on":35,"off":35.5,"midi":60,"hand":"left","staff":2,"voice":5,"m":12},{"on":35,"off":36,"midi":67,"hand":"right","staff":1,"voice":1,"m":12},{"on":35.5,"off":36,"midi":59,"hand":"left","staff":2,"voice":5,"m":12},{"on":36,"off":36.5,"midi":57,"hand":"left","staff":2,"voice":5,"m":12},{"on":36,"off":37,"midi":67,"hand":"right","staff":1,"voice":1,"m":12},{"on":36.5,"off":37,"midi":55,"hand":"left","staff":2,"voice":5,"m":12},{"on":37,"off":39,"midi":57,"hand":"left","staff":2,"voice":5,"m":13},{"on":37,"off":38,"midi":72,"hand":"right","staff":1,"voice":1,"m":13},{"on":38,"off":38.5,"midi":74,"hand":"right","staff":1,"voice":1,"m":13},{"on":38.5,"off":39,"midi":72,"hand":"right","staff":1,"voice":1,"m":13},{"on":39,"off":40,"midi":54,"hand":"left","staff":2,"voice":5,"m":13},{"on":39,"off":39.5,"midi":71,"hand":"right","staff":1,"voice":1,"m":13},{"on":39.5,"off":40,"midi":69,"hand":"right","staff":1,"voice":1,"m":13},{"on":40,"off":42,"midi":55,"hand":"left","staff":2,"voice":5,"m":14},{"on":40,"off":41,"midi":71,"hand":"right","staff":1,"voice":1,"m":14},{"on":41,"off":41.5,"midi":72,"hand":"right","staff":1,"voice":1,"m":14},{"on":41.5,"off":42,"midi":71,"hand":"right","staff":1,"voice":1,"m":14},{"on":42,"off":43,"midi":59,"hand":"left","staff":2,"voice":5,"m":14},{"on":42,"off":42.5,"midi":69,"hand":"right","staff":1,"voice":1,"m":14},{"on":42.5,"off":43,"midi":67,"hand":"right","staff":1,"voice":1,"m":14},{"on":43,"off":44,"midi":60,"hand":"left","staff":2,"voice":5,"m":15},{"on":43,"off":44,"midi":69,"hand":"right","staff":1,"voice":1,"m":15},{"on":44,"off":45,"midi":62,"hand":"left","staff":2,"voice":5,"m":15},{"on":44,"off":44.5,"midi":71,"hand":"right","staff":1,"voice":1,"m":15},{"on":44.5,"off":45,"midi":69,"hand":"right","staff":1,"voice":1,"m":15},{"on":45,"off":46,"midi":50,"hand":"left","staff":2,"voice":5,"m":15},{"on":45,"off":45.5,"midi":67,"hand":"right","staff":1,"voice":1,"m":15},{"on":45.5,"off":46,"midi":66,"hand":"right","staff":1,"voice":1,"m":15},{"on":46,"off":48,"midi":55,"hand":"left","staff":2,"voice":5,"m":16},{"on":46,"off":49,"midi":67,"hand":"right","staff":1,"voice":1,"m":16},{"on":48,"off":49,"midi":43,"hand":"left","staff":2,"voice":5,"m":16},{"on":49,"off":51,"midi":55,"hand":"left","staff":2,"voice":6,"m":1},{"on":49,"off":51,"midi":59,"hand":"left","staff":2,"voice":5,"m":1},{"on":49,"off":51,"midi":62,"hand":"left","staff":2,"voice":5,"m":1},{"on":49,"off":50,"midi":74,"hand":"right","staff":1,"voice":1,"m":1},{"on":50,"off":50.5,"midi":67,"hand":"right","staff":1,"voice":1,"m":1},{"on":50.5,"off":51,"midi":69,"hand":"right","staff":1,"voice":1,"m":1},{"on":51,"off":52,"midi":57,"hand":"left","staff":2,"voice":6,"m":1},{"on":51,"off":51.5,"midi":71,"hand":"right","staff":1,"voice":1,"m":1},{"on":51.5,"off":52,"midi":72,"hand":"right","staff":1,"voice":1,"m":1},{"on":52,"off":55,"midi":59,"hand":"left","staff":2,"voice":5,"m":2},{"on":52,"off":53,"midi":74,"hand":"right","staff":1,"voice":1,"m":2},{"on":53,"off":54,"midi":67,"hand":"right","staff":1,"voice":1,"m":2},{"on":54,"off":55,"midi":67,"hand":"right","staff":1,"voice":1,"m":2},{"on":55,"off":58,"midi":60,"hand":"left","staff":2,"voice":5,"m":3},{"on":55,"off":56,"midi":76,"hand":"right","staff":1,"voice":1,"m":3},{"on":56,"off":56.5,"midi":72,"hand":"right","staff":1,"voice":1,"m":3},{"on":56.5,"off":57,"midi":74,"hand":"right","staff":1,"voice":1,"m":3},{"on":57,"off":57.5,"midi":76,"hand":"right","staff":1,"voice":1,"m":3},{"on":57.5,"off":58,"midi":78,"hand":"right","staff":1,"voice":1,"m":3},{"on":58,"off":61,"midi":59,"hand":"left","staff":2,"voice":5,"m":4},{"on":58,"off":59,"midi":79,"hand":"right","staff":1,"voice":1,"m":4},{"on":59,"off":60,"midi":67,"hand":"right","staff":1,"voice":1,"m":4},{"on":60,"off":61,"midi":67,"hand":"right","staff":1,"voice":1,"m":4},{"on":61,"off":64,"midi":57,"hand":"left","staff":2,"voice":5,"m":5},{"on":61,"off":62,"midi":72,"hand":"right","staff":1,"voice":1,"m":5},{"on":62,"off":62.5,"midi":74,"hand":"right","staff":1,"voice":1,"m":5},{"on":62.5,"off":63,"midi":72,"hand":"right","staff":1,"voice":1,"m":5},{"on":63,"off":63.5,"midi":71,"hand":"right","staff":1,"voice":1,"m":5},{"on":63.5,"off":64,"midi":69,"hand":"right","staff":1,"voice":1,"m":5},{"on":64,"off":67,"midi":55,"hand":"left","staff":2,"voice":5,"m":6},{"on":64,"off":65,"midi":71,"hand":"right","staff":1,"voice":1,"m":6},{"on":65,"off":65.5,"midi":72,"hand":"right","staff":1,"voice":1,"m":6},{"on":65.5,"off":66,"midi":71,"hand":"right","staff":1,"voice":1,"m":6},{"on":66,"off":66.5,"midi":69,"hand":"right","staff":1,"voice":1,"m":6},{"on":66.5,"off":67,"midi":67,"hand":"right","staff":1,"voice":1,"m":6},{"on":67,"off":68,"midi":62,"hand":"left","staff":2,"voice":5,"m":7},{"on":67,"off":68,"midi":66,"hand":"right","staff":1,"voice":1,"m":7},{"on":68,"off":69,"midi":59,"hand":"left","staff":2,"voice":5,"m":7},{"on":68,"off":68.5,"midi":67,"hand":"right","staff":1,"voice":1,"m":7},{"on":68.5,"off":69,"midi":69,"hand":"right","staff":1,"voice":1,"m":7},{"on":69,"off":70,"midi":55,"hand":"left","staff":2,"voice":5,"m":7},{"on":69,"off":69.5,"midi":71,"hand":"right","staff":1,"voice":1,"m":7},{"on":69.5,"off":70,"midi":67,"hand":"right","staff":1,"voice":1,"m":7},{"on":70,"off":71,"midi":72,"hand":"right","staff":1,"voice":1,"m":8},{"on":71,"off":72,"midi":62,"hand":"left","staff":2,"voice":5,"m":8},{"on":71,"off":74,"midi":69,"hand":"right","staff":1,"voice":1,"m":8},{"on":72,"off":72.5,"midi":50,"hand":"left","staff":2,"voice":5,"m":8},{"on":72.5,"off":73,"midi":60,"hand":"left","staff":2,"voice":5,"m":8},{"on":73,"off":73.5,"midi":59,"hand":"left","staff":2,"voice":5,"m":8},{"on":73.5,"off":74,"midi":57,"hand":"left","staff":2,"voice":5,"m":8},{"on":74,"off":76,"midi":59,"hand":"left","staff":2,"voice":5,"m":9},{"on":74,"off":75,"midi":74,"hand":"right","staff":1,"voice":1,"m":9},{"on":75,"off":75.5,"midi":67,"hand":"right","staff":1,"voice":1,"m":9},{"on":75.5,"off":76,"midi":69,"hand":"right","staff":1,"voice":1,"m":9},{"on":76,"off":77,"midi":57,"hand":"left","staff":2,"voice":5,"m":9},{"on":76,"off":76.5,"midi":71,"hand":"right","staff":1,"voice":1,"m":9},{"on":76.5,"off":77,"midi":72,"hand":"right","staff":1,"voice":1,"m":9},{"on":77,"off":78,"midi":55,"hand":"left","staff":2,"voice":5,"m":10},{"on":77,"off":78,"midi":74,"hand":"right","staff":1,"voice":1,"m":10},{"on":78,"off":79,"midi":59,"hand":"left","staff":2,"voice":5,"m":10},{"on":78,"off":79,"midi":67,"hand":"right","staff":1,"voice":1,"m":10},{"on":79,"off":80,"midi":55,"hand":"left","staff":2,"voice":5,"m":10},{"on":79,"off":80,"midi":67,"hand":"right","staff":1,"voice":1,"m":10},{"on":80,"off":83,"midi":60,"hand":"left","staff":2,"voice":5,"m":11},{"on":80,"off":81,"midi":76,"hand":"right","staff":1,"voice":1,"m":11},{"on":81,"off":81.5,"midi":72,"hand":"right","staff":1,"voice":1,"m":11},{"on":81.5,"off":82,"midi":74,"hand":"right","staff":1,"voice":1,"m":11},{"on":82,"off":82.5,"midi":76,"hand":"right","staff":1,"voice":1,"m":11},{"on":82.5,"off":83,"midi":78,"hand":"right","staff":1,"voice":1,"m":11},{"on":83,"off":84,"midi":59,"hand":"left","staff":2,"voice":5,"m":12},{"on":83,"off":84,"midi":79,"hand":"right","staff":1,"voice":1,"m":12},{"on":84,"off":84.5,"midi":60,"hand":"left","staff":2,"voice":5,"m":12},{"on":84,"off":85,"midi":67,"hand":"right","staff":1,"voice":1,"m":12},{"on":84.5,"off":85,"midi":59,"hand":"left","staff":2,"voice":5,"m":12},{"on":85,"off":85.5,"midi":57,"hand":"left","staff":2,"voice":5,"m":12},{"on":85,"off":86,"midi":67,"hand":"right","staff":1,"voice":1,"m":12},{"on":85.5,"off":86,"midi":55,"hand":"left","staff":2,"voice":5,"m":12},{"on":86,"off":88,"midi":57,"hand":"left","staff":2,"voice":5,"m":13},{"on":86,"off":87,"midi":72,"hand":"right","staff":1,"voice":1,"m":13},{"on":87,"off":87.5,"midi":74,"hand":"right","staff":1,"voice":1,"m":13},{"on":87.5,"off":88,"midi":72,"hand":"right","staff":1,"voice":1,"m":13},{"on":88,"off":89,"midi":54,"hand":"left","staff":2,"voice":5,"m":13},{"on":88,"off":88.5,"midi":71,"hand":"right","staff":1,"voice":1,"m":13},{"on":88.5,"off":89,"midi":69,"hand":"right","staff":1,"voice":1,"m":13},{"on":89,"off":91,"midi":55,"hand":"left","staff":2,"voice":5,"m":14},{"on":89,"off":90,"midi":71,"hand":"right","staff":1,"voice":1,"m":14},{"on":90,"off":90.5,"midi":72,"hand":"right","staff":1,"voice":1,"m":14},{"on":90.5,"off":91,"midi":71,"hand":"right","staff":1,"voice":1,"m":14},{"on":91,"off":92,"midi":59,"hand":"left","staff":2,"voice":5,"m":14},{"on":91,"off":91.5,"midi":69,"hand":"right","staff":1,"voice":1,"m":14},{"on":91.5,"off":92,"midi":67,"hand":"right","staff":1,"voice":1,"m":14},{"on":92,"off":93,"midi":60,"hand":"left","staff":2,"voice":5,"m":15},{"on":92,"off":93,"midi":69,"hand":"right","staff":1,"voice":1,"m":15},{"on":93,"off":94,"midi":62,"hand":"left","staff":2,"voice":5,"m":15},{"on":93,"off":93.5,"midi":71,"hand":"right","staff":1,"voice":1,"m":15},{"on":93.5,"off":94,"midi":69,"hand":"right","staff":1,"voice":1,"m":15},{"on":94,"off":95,"midi":50,"hand":"left","staff":2,"voice":5,"m":15},{"on":94,"off":94.5,"midi":67,"hand":"right","staff":1,"voice":1,"m":15},{"on":94.5,"off":95,"midi":66,"hand":"right","staff":1,"voice":1,"m":15},{"on":95,"off":97,"midi":55,"hand":"left","staff":2,"voice":5,"m":16},{"on":95,"off":98,"midi":67,"hand":"right","staff":1,"voice":1,"m":16},{"on":97,"off":98,"midi":43,"hand":"left","staff":2,"voice":5,"m":16},{"on":98,"off":101,"midi":55,"hand":"left","staff":2,"voice":5,"m":17},{"on":98,"off":99,"midi":83,"hand":"right","staff":1,"voice":1,"m":17},{"on":99,"off":99.5,"midi":79,"hand":"right","staff":1,"voice":1,"m":17},{"on":99.5,"off":100,"midi":81,"hand":"right","staff":1,"voice":1,"m":17},{"on":100,"off":100.5,"midi":83,"hand":"right","staff":1,"voice":1,"m":17},{"on":100.5,"off":101,"midi":79,"hand":"right","staff":1,"voice":1,"m":17},{"on":101,"off":104,"midi":54,"hand":"left","staff":2,"voice":5,"m":18},{"on":101,"off":102,"midi":81,"hand":"right","staff":1,"voice":1,"m":18},{"on":102,"off":102.5,"midi":74,"hand":"right","staff":1,"voice":1,"m":18},{"on":102.5,"off":103,"midi":76,"hand":"right","staff":1,"voice":1,"m":18},{"on":103,"off":103.5,"midi":78,"hand":"right","staff":1,"voice":1,"m":18},{"on":103.5,"off":104,"midi":74,"hand":"right","staff":1,"voice":1,"m":18},{"on":104,"off":105,"midi":52,"hand":"left","staff":2,"voice":5,"m":19},{"on":104,"off":105,"midi":79,"hand":"right","staff":1,"voice":1,"m":19},{"on":105,"off":106,"midi":55,"hand":"left","staff":2,"voice":5,"m":19},{"on":105,"off":105.5,"midi":76,"hand":"right","staff":1,"voice":1,"m":19},{"on":105.5,"off":106,"midi":78,"hand":"right","staff":1,"voice":1,"m":19},{"on":106,"off":107,"midi":52,"hand":"left","staff":2,"voice":5,"m":19},{"on":106,"off":106.5,"midi":79,"hand":"right","staff":1,"voice":1,"m":19},{"on":106.5,"off":107,"midi":74,"hand":"right","staff":1,"voice":1,"m":19},{"on":107,"off":109,"midi":57,"hand":"left","staff":2,"voice":5,"m":20},{"on":107,"off":108,"midi":73,"hand":"right","staff":1,"voice":1,"m":20},{"on":108,"off":108.5,"midi":71,"hand":"right","staff":1,"voice":1,"m":20},{"on":108.5,"off":109,"midi":73,"hand":"right","staff":1,"voice":1,"m":20},{"on":109,"off":110,"midi":45,"hand":"left","staff":2,"voice":5,"m":20},{"on":109,"off":110,"midi":69,"hand":"right","staff":1,"voice":1,"m":20},{"on":110,"off":113,"midi":57,"hand":"left","staff":2,"voice":5,"m":21},{"on":110,"off":110.5,"midi":69,"hand":"right","staff":1,"voice":1,"m":21},{"on":110.5,"off":111,"midi":71,"hand":"right","staff":1,"voice":1,"m":21},{"on":111,"off":111.5,"midi":73,"hand":"right","staff":1,"voice":1,"m":21},{"on":111.5,"off":112,"midi":74,"hand":"right","staff":1,"voice":1,"m":21},{"on":112,"off":112.5,"midi":76,"hand":"right","staff":1,"voice":1,"m":21},{"on":112.5,"off":113,"midi":78,"hand":"right","staff":1,"voice":1,"m":21},{"on":113,"off":114,"midi":59,"hand":"left","staff":2,"voice":5,"m":22},{"on":113,"off":114,"midi":79,"hand":"right","staff":1,"voice":1,"m":22},{"on":114,"off":115,"midi":62,"hand":"left","staff":2,"voice":5,"m":22},{"on":114,"off":115,"midi":78,"hand":"right","staff":1,"voice":1,"m":22},{"on":115,"off":116,"midi":61,"hand":"left","staff":2,"voice":5,"m":22},{"on":115,"off":116,"midi":76,"hand":"right","staff":1,"voice":1,"m":22},{"on":116,"off":117,"midi":62,"hand":"left","staff":2,"voice":5,"m":23},{"on":116,"off":117,"midi":78,"hand":"right","staff":1,"voice":1,"m":23},{"on":117,"off":118,"midi":54,"hand":"left","staff":2,"voice":5,"m":23},{"on":117,"off":118,"midi":69,"hand":"right","staff":1,"voice":1,"m":23},{"on":118,"off":119,"midi":57,"hand":"left","staff":2,"voice":5,"m":23},{"on":118,"off":119,"midi":73,"hand":"right","staff":1,"voice":1,"m":23},{"on":119,"off":120,"midi":62,"hand":"left","staff":2,"voice":5,"m":24},{"on":119,"off":122,"midi":74,"hand":"right","staff":1,"voice":1,"m":24},{"on":120,"off":121,"midi":50,"hand":"left","staff":2,"voice":5,"m":24},{"on":121,"off":122,"midi":60,"hand":"left","staff":2,"voice":5,"m":24},{"on":122,"off":124,"midi":59,"hand":"left","staff":2,"voice":5,"m":25},{"on":122,"off":123,"midi":74,"hand":"right","staff":1,"voice":1,"m":25},{"on":123,"off":125,"midi":62,"hand":"left","staff":2,"voice":1,"m":25},{"on":123,"off":123.5,"midi":67,"hand":"right","staff":1,"voice":2,"m":25},{"on":123.5,"off":124,"midi":66,"hand":"right","staff":1,"voice":2,"m":25},{"on":124,"off":125,"midi":59,"hand":"left","staff":2,"voice":5,"m":25},{"on":124,"off":125,"midi":67,"hand":"right","staff":1,"voice":2,"m":25},{"on":125,"off":127,"midi":60,"hand":"left","staff":2,"voice":5,"m":26},{"on":125,"off":126,"midi":76,"hand":"right","staff":1,"voice":1,"m":26},{"on":126,"off":128,"midi":64,"hand":"left","staff":2,"voice":1,"m":26},{"on":126,"off":126.5,"midi":67,"hand":"right","staff":1,"voice":2,"m":26},{"on":126.5,"off":127,"midi":66,"hand":"right","staff":1,"voice":2,"m":26},{"on":127,"off":128,"midi":60,"hand":"left","staff":2,"voice":5,"m":26},{"on":127,"off":128,"midi":67,"hand":"right","staff":1,"voice":2,"m":26},{"on":128,"off":129,"midi":59,"hand":"left","staff":2,"voice":5,"m":27},{"on":128,"off":129,"midi":74,"hand":"right","staff":1,"voice":1,"m":27},{"on":129,"off":130,"midi":57,"hand":"left","staff":2,"voice":5,"m":27},{"on":129,"off":130,"midi":72,"hand":"right","staff":1,"voice":1,"m":27},{"on":130,"off":131,"midi":55,"hand":"left","staff":2,"voice":5,"m":27},{"on":130,"off":131,"midi":71,"hand":"right","staff":1,"voice":1,"m":27},{"on":131,"off":133,"midi":62,"hand":"left","staff":2,"voice":5,"m":28},{"on":131,"off":131.5,"midi":69,"hand":"right","staff":1,"voice":1,"m":28},{"on":131.5,"off":132,"midi":67,"hand":"right","staff":1,"voice":1,"m":28},{"on":132,"off":132.5,"midi":66,"hand":"right","staff":1,"voice":1,"m":28},{"on":132.5,"off":133,"midi":67,"hand":"right","staff":1,"voice":1,"m":28},{"on":133,"off":134,"midi":69,"hand":"right","staff":1,"voice":1,"m":28},{"on":134,"off":137,"midi":50,"hand":"left","staff":2,"voice":6,"m":29},{"on":134,"off":134.5,"midi":62,"hand":"right","staff":1,"voice":1,"m":29},{"on":134.5,"off":135,"midi":64,"hand":"right","staff":1,"voice":1,"m":29},{"on":135,"off":135.5,"midi":66,"hand":"right","staff":1,"voice":1,"m":29},{"on":135.5,"off":136,"midi":67,"hand":"right","staff":1,"voice":1,"m":29},{"on":136,"off":137,"midi":54,"hand":"left","staff":2,"voice":5,"m":29},{"on":136,"off":136.5,"midi":69,"hand":"right","staff":1,"voice":1,"m":29},{"on":136.5,"off":137,"midi":71,"hand":"right","staff":1,"voice":1,"m":29},{"on":137,"off":138,"midi":52,"hand":"left","staff":2,"voice":5,"m":30},{"on":137,"off":138,"midi":72,"hand":"right","staff":1,"voice":1,"m":30},{"on":138,"off":139,"midi":55,"hand":"left","staff":2,"voice":5,"m":30},{"on":138,"off":139,"midi":71,"hand":"right","staff":1,"voice":1,"m":30},{"on":139,"off":140,"midi":54,"hand":"left","staff":2,"voice":5,"m":30},{"on":139,"off":140,"midi":69,"hand":"right","staff":1,"voice":1,"m":30},{"on":140,"off":141,"midi":55,"hand":"left","staff":2,"voice":5,"m":31},{"on":140,"off":140.5,"midi":71,"hand":"right","staff":1,"voice":1,"m":31},{"on":140.5,"off":141,"midi":74,"hand":"right","staff":1,"voice":1,"m":31},{"on":141,"off":142,"midi":47,"hand":"left","staff":2,"voice":5,"m":31},{"on":141,"off":142,"midi":67,"hand":"right","staff":1,"voice":1,"m":31},{"on":142,"off":143,"midi":50,"hand":"left","staff":2,"voice":5,"m":31},{"on":142,"off":143,"midi":66,"hand":"right","staff":1,"voice":1,"m":31},{"on":143,"off":144,"midi":55,"hand":"left","staff":2,"voice":5,"m":32},{"on":143,"off":145,"midi":59,"hand":"right","staff":1,"voice":2,"m":32},{"on":143,"off":145,"midi":62,"hand":"right","staff":1,"voice":2,"m":32},{"on":143,"off":146,"midi":67,"hand":"right","staff":1,"voice":1,"m":32},{"on":144,"off":145,"midi":50,"hand":"left","staff":2,"voice":5,"m":32},{"on":145,"off":146,"midi":43,"hand":"left","staff":2,"voice":5,"m":32},{"on":146,"off":149,"midi":55,"hand":"left","staff":2,"voice":5,"m":17},{"on":146,"off":147,"midi":83,"hand":"right","staff":1,"voice":1,"m":17},{"on":147,"off":147.5,"midi":79,"hand":"right","staff":1,"voice":1,"m":17},{"on":147.5,"off":148,"midi":81,"hand":"right","staff":1,"voice":1,"m":17},{"on":148,"off":148.5,"midi":83,"hand":"right","staff":1,"voice":1,"m":17},{"on":148.5,"off":149,"midi":79,"hand":"right","staff":1,"voice":1,"m":17},{"on":149,"off":152,"midi":54,"hand":"left","staff":2,"voice":5,"m":18},{"on":149,"off":150,"midi":81,"hand":"right","staff":1,"voice":1,"m":18},{"on":150,"off":150.5,"midi":74,"hand":"right","staff":1,"voice":1,"m":18},{"on":150.5,"off":151,"midi":76,"hand":"right","staff":1,"voice":1,"m":18},{"on":151,"off":151.5,"midi":78,"hand":"right","staff":1,"voice":1,"m":18},{"on":151.5,"off":152,"midi":74,"hand":"right","staff":1,"voice":1,"m":18},{"on":152,"off":153,"midi":52,"hand":"left","staff":2,"voice":5,"m":19},{"on":152,"off":153,"midi":79,"hand":"right","staff":1,"voice":1,"m":19},{"on":153,"off":154,"midi":55,"hand":"left","staff":2,"voice":5,"m":19},{"on":153,"off":153.5,"midi":76,"hand":"right","staff":1,"voice":1,"m":19},{"on":153.5,"off":154,"midi":78,"hand":"right","staff":1,"voice":1,"m":19},{"on":154,"off":155,"midi":52,"hand":"left","staff":2,"voice":5,"m":19},{"on":154,"off":154.5,"midi":79,"hand":"right","staff":1,"voice":1,"m":19},{"on":154.5,"off":155,"midi":74,"hand":"right","staff":1,"voice":1,"m":19},{"on":155,"off":157,"midi":57,"hand":"left","staff":2,"voice":5,"m":20},{"on":155,"off":156,"midi":73,"hand":"right","staff":1,"voice":1,"m":20},{"on":156,"off":156.5,"midi":71,"hand":"right","staff":1,"voice":1,"m":20},{"on":156.5,"off":157,"midi":73,"hand":"right","staff":1,"voice":1,"m":20},{"on":157,"off":158,"midi":45,"hand":"left","staff":2,"voice":5,"m":20},{"on":157,"off":158,"midi":69,"hand":"right","staff":1,"voice":1,"m":20},{"on":158,"off":161,"midi":57,"hand":"left","staff":2,"voice":5,"m":21},{"on":158,"off":158.5,"midi":69,"hand":"right","staff":1,"voice":1,"m":21},{"on":158.5,"off":159,"midi":71,"hand":"right","staff":1,"voice":1,"m":21},{"on":159,"off":159.5,"midi":73,"hand":"right","staff":1,"voice":1,"m":21},{"on":159.5,"off":160,"midi":74,"hand":"right","staff":1,"voice":1,"m":21},{"on":160,"off":160.5,"midi":76,"hand":"right","staff":1,"voice":1,"m":21},{"on":160.5,"off":161,"midi":78,"hand":"right","staff":1,"voice":1,"m":21},{"on":161,"off":162,"midi":59,"hand":"left","staff":2,"voice":5,"m":22},{"on":161,"off":162,"midi":79,"hand":"right","staff":1,"voice":1,"m":22},{"on":162,"off":163,"midi":62,"hand":"left","staff":2,"voice":5,"m":22},{"on":162,"off":163,"midi":78,"hand":"right","staff":1,"voice":1,"m":22},{"on":163,"off":164,"midi":61,"hand":"left","staff":2,"voice":5,"m":22},{"on":163,"off":164,"midi":76,"hand":"right","staff":1,"voice":1,"m":22},{"on":164,"off":165,"midi":62,"hand":"left","staff":2,"voice":5,"m":23},{"on":164,"off":165,"midi":78,"hand":"right","staff":1,"voice":1,"m":23},{"on":165,"off":166,"midi":54,"hand":"left","staff":2,"voice":5,"m":23},{"on":165,"off":166,"midi":69,"hand":"right","staff":1,"voice":1,"m":23},{"on":166,"off":167,"midi":57,"hand":"left","staff":2,"voice":5,"m":23},{"on":166,"off":167,"midi":73,"hand":"right","staff":1,"voice":1,"m":23},{"on":167,"off":168,"midi":62,"hand":"left","staff":2,"voice":5,"m":24},{"on":167,"off":170,"midi":74,"hand":"right","staff":1,"voice":1,"m":24},{"on":168,"off":169,"midi":50,"hand":"left","staff":2,"voice":5,"m":24},{"on":169,"off":170,"midi":60,"hand":"left","staff":2,"voice":5,"m":24},{"on":170,"off":172,"midi":59,"hand":"left","staff":2,"voice":5,"m":25},{"on":170,"off":171,"midi":74,"hand":"right","staff":1,"voice":1,"m":25},{"on":171,"off":173,"midi":62,"hand":"left","staff":2,"voice":1,"m":25},{"on":171,"off":171.5,"midi":67,"hand":"right","staff":1,"voice":2,"m":25},{"on":171.5,"off":172,"midi":66,"hand":"right","staff":1,"voice":2,"m":25},{"on":172,"off":173,"midi":59,"hand":"left","staff":2,"voice":5,"m":25},{"on":172,"off":173,"midi":67,"hand":"right","staff":1,"voice":2,"m":25},{"on":173,"off":175,"midi":60,"hand":"left","staff":2,"voice":5,"m":26},{"on":173,"off":174,"midi":76,"hand":"right","staff":1,"voice":1,"m":26},{"on":174,"off":176,"midi":64,"hand":"left","staff":2,"voice":1,"m":26},{"on":174,"off":174.5,"midi":67,"hand":"right","staff":1,"voice":2,"m":26},{"on":174.5,"off":175,"midi":66,"hand":"right","staff":1,"voice":2,"m":26},{"on":175,"off":176,"midi":60,"hand":"left","staff":2,"voice":5,"m":26},{"on":175,"off":176,"midi":67,"hand":"right","staff":1,"voice":2,"m":26},{"on":176,"off":177,"midi":59,"hand":"left","staff":2,"voice":5,"m":27},{"on":176,"off":177,"midi":74,"hand":"right","staff":1,"voice":1,"m":27},{"on":177,"off":178,"midi":57,"hand":"left","staff":2,"voice":5,"m":27},{"on":177,"off":178,"midi":72,"hand":"right","staff":1,"voice":1,"m":27},{"on":178,"off":179,"midi":55,"hand":"left","staff":2,"voice":5,"m":27},{"on":178,"off":179,"midi":71,"hand":"right","staff":1,"voice":1,"m":27},{"on":179,"off":181,"midi":62,"hand":"left","staff":2,"voice":5,"m":28},{"on":179,"off":179.5,"midi":69,"hand":"right","staff":1,"voice":1,"m":28},{"on":179.5,"off":180,"midi":67,"hand":"right","staff":1,"voice":1,"m":28},{"on":180,"off":180.5,"midi":66,"hand":"right","staff":1,"voice":1,"m":28},{"on":180.5,"off":181,"midi":67,"hand":"right","staff":1,"voice":1,"m":28},{"on":181,"off":182,"midi":69,"hand":"right","staff":1,"voice":1,"m":28},{"on":182,"off":185,"midi":50,"hand":"left","staff":2,"voice":6,"m":29},{"on":182,"off":182.5,"midi":62,"hand":"right","staff":1,"voice":1,"m":29},{"on":182.5,"off":183,"midi":64,"hand":"right","staff":1,"voice":1,"m":29},{"on":183,"off":183.5,"midi":66,"hand":"right","staff":1,"voice":1,"m":29},{"on":183.5,"off":184,"midi":67,"hand":"right","staff":1,"voice":1,"m":29},{"on":184,"off":185,"midi":54,"hand":"left","staff":2,"voice":5,"m":29},{"on":184,"off":184.5,"midi":69,"hand":"right","staff":1,"voice":1,"m":29},{"on":184.5,"off":185,"midi":71,"hand":"right","staff":1,"voice":1,"m":29},{"on":185,"off":186,"midi":52,"hand":"left","staff":2,"voice":5,"m":30},{"on":185,"off":186,"midi":72,"hand":"right","staff":1,"voice":1,"m":30},{"on":186,"off":187,"midi":55,"hand":"left","staff":2,"voice":5,"m":30},{"on":186,"off":187,"midi":71,"hand":"right","staff":1,"voice":1,"m":30},{"on":187,"off":188,"midi":54,"hand":"left","staff":2,"voice":5,"m":30},{"on":187,"off":188,"midi":69,"hand":"right","staff":1,"voice":1,"m":30},{"on":188,"off":189,"midi":55,"hand":"left","staff":2,"voice":5,"m":31},{"on":188,"off":188.5,"midi":71,"hand":"right","staff":1,"voice":1,"m":31},{"on":188.5,"off":189,"midi":74,"hand":"right","staff":1,"voice":1,"m":31},{"on":189,"off":190,"midi":47,"hand":"left","staff":2,"voice":5,"m":31},{"on":189,"off":190,"midi":67,"hand":"right","staff":1,"voice":1,"m":31},{"on":190,"off":191,"midi":50,"hand":"left","staff":2,"voice":5,"m":31},{"on":190,"off":191,"midi":66,"hand":"right","staff":1,"voice":1,"m":31},{"on":191,"off":192,"midi":55,"hand":"left","staff":2,"voice":5,"m":32},{"on":191,"off":193,"midi":59,"hand":"right","staff":1,"voice":2,"m":32},{"on":191,"off":193,"midi":62,"hand":"right","staff":1,"voice":2,"m":32},{"on":191,"off":194,"midi":67,"hand":"right","staff":1,"voice":1,"m":32},{"on":192,"off":193,"midi":50,"hand":"left","staff":2,"voice":5,"m":32},{"on":193,"off":194,"midi":43,"hand":"left","staff":2,"voice":5,"m":32}]};
+</script>
+<script>
+(() => {
+  const events = DATA.events;
+  const beats = DATA.meta.durationQuarters;
+  const minMidi = Math.min(...events.map(e => e.midi)) - 2;
+  const maxMidi = Math.max(...events.map(e => e.midi)) + 2;
+  const rows = maxMidi - minMidi + 1;
+  const css = getComputedStyle(document.documentElement);
+  const col = n => css.getPropertyValue(n).trim();
+
+  document.getElementById("meta").textContent =
+    DATA.meta.notes + " notes · " + DATA.meta.measures + " measures · " +
+    beats + " beats · MIDI " + (minMidi+2) + "–" + (maxMidi-2);
+
+  const canvas = document.getElementById("roll");
+  const ctx = canvas.getContext("2d");
+  const PADL = 34;              // left gutter for pitch labels
+  let W = 0, H = 0, pxPerBeat = 0, rowH = 0, dpr = 1;
+
+  function layout() {
+    dpr = window.devicePixelRatio || 1;
+    const cssW = canvas.parentElement.clientWidth - 0;
+    pxPerBeat = Math.max(10, (cssW - PADL) / beats);
+    rowH = 9;
+    const cssH = rows * rowH + 16;
+    W = cssW; H = cssH;
+    canvas.style.height = cssH + "px";
+    canvas.width = Math.floor(cssW * dpr);
+    canvas.height = Math.floor(cssH * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  const yOf = midi => 8 + (maxMidi - midi) * rowH;
+  const xOf = beat => PADL + beat * pxPerBeat;
+
+  // ---- transport ----------------------------------------------------------
+  let playing = false, posBeat = 0, lastT = 0, bpm = 100, handFilter = "both", sound = true;
+  const visible = e => handFilter === "both" || e.hand === handFilter;
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    // pitch grid: highlight C rows
+    for (let m = minMidi; m <= maxMidi; m++) {
+      const y = yOf(m);
+      const isC = m % 12 === 0;
+      ctx.fillStyle = isC ? col("--grid") : "transparent";
+      if (isC) ctx.fillRect(PADL, y - rowH + 2, W - PADL, rowH);
+      if (isC) { ctx.fillStyle = col("--muted"); ctx.font = "9px sans-serif";
+                 ctx.fillText("C" + (m/12 - 1), 4, y); }
+    }
+    // bar lines (every ~3 beats for 3/4; derive from time sigs if present)
+    const beatsPerBar = (DATA.meta.timeSignatures[0]?.beats ?? 4) *
+                        4 / (DATA.meta.timeSignatures[0]?.beatType ?? 4);
+    ctx.strokeStyle = col("--grid"); ctx.lineWidth = 1;
+    for (let b = 0; b <= beats + 0.001; b += beatsPerBar) {
+      ctx.beginPath(); ctx.moveTo(xOf(b), 4); ctx.lineTo(xOf(b), H - 4); ctx.stroke();
+    }
+    // notes
+    for (const e of events) {
+      if (!visible(e)) continue;
+      const x = xOf(e.on), w = Math.max(2, (e.off - e.on) * pxPerBeat - 1), y = yOf(e.midi);
+      const sounding = e.on <= posBeat && posBeat < e.off;
+      ctx.fillStyle = e.hand === "left" ? col("--lh") : col("--rh");
+      ctx.globalAlpha = sounding ? 1 : 0.72;
+      roundRect(x, y - rowH + 2.5, w, rowH - 2, 2.5); ctx.fill();
+      if (sounding) { ctx.globalAlpha = 1; ctx.strokeStyle = col("--accent");
+                      ctx.lineWidth = 1.5; roundRect(x, y-rowH+2.5, w, rowH-2, 2.5); ctx.stroke(); }
+    }
+    ctx.globalAlpha = 1;
+    // playhead
+    const px = xOf(posBeat);
+    ctx.strokeStyle = col("--accent"); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(px, 2); ctx.lineTo(px, H - 2); ctx.stroke();
+  }
+  function roundRect(x, y, w, h, r) {
+    r = Math.min(r, w/2, h/2);
+    ctx.beginPath();
+    ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+  }
+
+  // ---- WebAudio synth -----------------------------------------------------
+  let ac = null;
+  const scheduled = new Set();
+  function noteFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+  function ping(midi, durSec) {
+    if (!ac) return;
+    const t = ac.currentTime, f = noteFreq(midi);
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = "triangle"; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(0.12, durSec));
+    o.connect(g).connect(ac.destination); o.start(t); o.stop(t + Math.max(0.13, durSec) + 0.02);
+  }
+
+  function tick(now) {
+    if (!playing) return;
+    const dt = (now - lastT) / 1000; lastT = now;
+    const prev = posBeat;
+    posBeat += dt * (bpm / 60);            // beats advanced (1 beat = 1 quarter)
+    // trigger notes crossed this step
+    if (sound && ac) {
+      for (const e of events) {
+        if (!visible(e)) continue;
+        if (e.on >= prev && e.on < posBeat && !scheduled.has(e)) {
+          ping(e.midi, (e.off - e.on) * 60 / bpm); scheduled.add(e);
+        }
+      }
+    }
+    if (posBeat >= beats) { posBeat = beats; playing = false; setPlayLabel(); }
+    draw();
+    if (playing) requestAnimationFrame(tick);
+  }
+
+  function setPlayLabel() { document.getElementById("play").textContent = playing ? "⏸ Pause" : "▶ Play"; }
+  function play() {
+    if (posBeat >= beats) posBeat = 0;
+    playing = !playing; setPlayLabel();
+    if (playing) {
+      if (sound && !ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+      if (ac && ac.state === "suspended") ac.resume();
+      scheduled.clear(); lastT = performance.now(); requestAnimationFrame(tick);
+    }
+  }
+
+  // ---- controls -----------------------------------------------------------
+  document.getElementById("play").onclick = play;
+  document.getElementById("restart").onclick = () => { posBeat = 0; scheduled.clear(); draw(); };
+  document.getElementById("tempo").oninput = e => { bpm = +e.target.value;
+    document.getElementById("bpm").textContent = bpm; };
+  document.getElementById("sound").onchange = e => { sound = e.target.checked; };
+  document.querySelectorAll("#hands button").forEach(b => b.onclick = () => {
+    document.querySelectorAll("#hands button").forEach(x => x.classList.remove("on"));
+    b.classList.add("on"); handFilter = b.dataset.h; draw();
+  });
+  window.addEventListener("resize", () => { layout(); draw(); });
+
+  layout(); draw();
+})();
+</script>
+</body>
+</html>
