@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchDaemon for the Arpeggio OMR service.
+
+  Use this (not the LaunchAgent) on a HEADLESS backend accessed over SSH: a
+  LaunchDaemon runs in the `system` domain at boot, with no GUI login required,
+  and can be loaded over SSH with sudo. It runs as the unprivileged user given
+  by `UserName` so it still uses the userland install under ~/arpeggio.
+
+  Installed to /Library/LaunchDaemons/com.arpeggio.omr.plist by
+  install-launchdaemon.sh, which substitutes __USER__ and __HOME__ (launchd does
+  not expand ~ or environment references in paths).
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.arpeggio.omr</string>
+
+    <!-- Run as the normal user so ~/arpeggio (JDK, venv, Audiveris) is used. -->
+    <key>UserName</key>
+    <string>__USER__</string>
+
+    <key>WorkingDirectory</key>
+    <string>__HOME__/arpeggio/omr</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>__HOME__/arpeggio/omr/scripts/run-native.sh</string>
+    </array>
+
+    <!-- Daemons start with no HOME; set it so the JVM's user.home resolves. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>__HOME__</string>
+    </dict>
+
+    <!-- Start at boot and keep it alive (restart on crash). -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>StandardOutPath</key>
+    <string>__HOME__/arpeggio/service.log</string>
+    <key>StandardErrorPath</key>
+    <string>__HOME__/arpeggio/service.log</string>
+</dict>
+</plist>

@@ -93,38 +93,47 @@ curl http://192.168.0.23:8000/health
 > On newer macOS with Homebrew, `scripts/install-native.sh` is the simpler
 > equivalent (`brew install openjdk@25 tesseract python`).
 
-#### Auto-start on boot (launchd LaunchAgent)
+#### Auto-start on boot
 
 The `nohup … &` start above dies on logout and doesn't come back after a reboot.
-To keep the service running permanently, install the bundled **launchd
-LaunchAgent** — a user-level agent (no sudo, everything stays under `~/arpeggio`):
+Two launchd options are bundled; **which one you want depends on how the Mac runs**:
+
+- **Headless backend reached over SSH → LaunchDaemon (recommended here).** A
+  LaunchDaemon runs in the `system` domain, starts at **boot with no GUI login**,
+  and can be loaded over SSH. It needs sudo once but runs the service as your
+  normal user (so it still uses `~/arpeggio`):
+
+  ```bash
+  ssh matveypro@192.168.0.23 'cd ~/arpeggio/omr && sudo bash scripts/install-launchdaemon.sh'
+  ```
+
+- **Mac that logs into the desktop → LaunchAgent (no sudo).** A LaunchAgent loads
+  into the user's **GUI (Aqua) session**, so it starts at login — but it **cannot
+  be loaded from an SSH session** (`launchctl` reports "Could not find domain for
+  port (Aqua)") and won't run on a headless Mac with no one logged in:
+
+  ```bash
+  # Run this from a GUI Terminal on the Mac (or Screen Sharing), not over SSH:
+  cd ~/arpeggio/omr && bash scripts/install-launchagent.sh
+  ```
+
+Both install `com.arpeggio.omr` with `RunAtLoad` + `KeepAlive` (restart on crash),
+log to `~/arpeggio/service.log`, and require `install-native-nobrew.sh` to have run
+first. The daemon installer also removes the redundant LaunchAgent to avoid a
+port-8000 clash. Placeholders `__HOME__`/`__USER__` are substituted at install
+time, since launchd does not expand `~`.
+
+Check status / tail the log / stop:
 
 ```bash
-ssh matveypro@192.168.0.23 'cd ~/arpeggio/omr && bash scripts/install-launchagent.sh'
-```
-
-This copies `scripts/com.arpeggio.omr.plist` into `~/Library/LaunchAgents/`
-(substituting the real home path for the `__HOME__` placeholder, since launchd
-does not expand `~`) and loads it. With `RunAtLoad` + `KeepAlive`, the service
-now **starts at every login/reboot and restarts automatically if it crashes**,
-logging to `~/arpeggio/service.log` (same file as the manual start). It requires
-`scripts/install-native-nobrew.sh` to have run first — the installer errors out
-if `~/arpeggio/omr/.native/env.sh` is missing.
-
-Check status or tail the log:
-
-```bash
-ssh matveypro@192.168.0.23 'launchctl print gui/$(id -u)/com.arpeggio.omr'
-ssh matveypro@192.168.0.23 'launchctl list | grep arpeggio'
+# LaunchDaemon:
+ssh matveypro@192.168.0.23 'sudo launchctl print system/com.arpeggio.omr'
 ssh matveypro@192.168.0.23 'tail -f ~/arpeggio/service.log'
-```
+ssh matveypro@192.168.0.23 'cd ~/arpeggio/omr && sudo bash scripts/install-launchdaemon.sh uninstall'
 
-Stop and uninstall (unloads the agent and removes the plist):
-
-```bash
-ssh matveypro@192.168.0.23 'cd ~/arpeggio/omr && bash scripts/install-launchagent.sh uninstall'
-# or manually:
-ssh matveypro@192.168.0.23 'launchctl bootout gui/$(id -u)/com.arpeggio.omr'
+# LaunchAgent (from a GUI Terminal):
+launchctl print gui/$(id -u)/com.arpeggio.omr
+cd ~/arpeggio/omr && bash scripts/install-launchagent.sh uninstall
 ```
 
 A healthy service responds:
