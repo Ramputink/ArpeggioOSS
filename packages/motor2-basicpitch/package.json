@@ -1,0 +1,30 @@
+{
+  "name": "@arpeggio/motor2-basicpitch",
+  "version": "0.1.0",
+  "description": "MOTOR 2 — real polyphonic note detection (Spotify Basic Pitch via TensorFlow.js) implementing the practice-engine PolyphonicDetector seam. Heavy ML dependency kept out of the pure core package; injected into a PracticeSession on demand.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test --import tsx test/*.test.ts"
+  },
+  "dependencies": {
+    "@arpeggio/practice-engine": "0.1.0",
+    "@spotify/basic-pitch": "^1.0.1",
+    "@tensorflow/tfjs": "^4.22.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "@types/node": "^20.17.0"
+  }
+}

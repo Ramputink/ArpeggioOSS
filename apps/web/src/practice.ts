@@ -13,6 +13,7 @@
  * so listen calls never overlap (see the serialization note below).
  */
 import { PracticeSession, expectedNotesFromScore } from "@arpeggio/practice-engine";
+import type { PolyphonicDetector } from "@arpeggio/practice-engine";
 import type { Score } from "@arpeggio/musicxml-parser";
 
 import type {
@@ -50,8 +51,13 @@ export class LivePractice {
   /** Guards against emitting the final done-progress more than once. */
   private finished = false;
 
-  constructor(score: Score, callbacks: PracticeCallbacks) {
-    this.session = new PracticeSession(score);
+  /**
+   * @param poly Optional real MOTOR 2 (polyphonic) detector. When omitted the
+   *   session falls back to the built-in stub and only YIN (monophonic) runs —
+   *   pass a `BasicPitchDetector` to actually transcribe chords.
+   */
+  constructor(score: Score, callbacks: PracticeCallbacks, poly?: PolyphonicDetector) {
+    this.session = new PracticeSession(score, poly ? { poly } : {});
     this.total = expectedNotesFromScore(score).length;
     this.callbacks = callbacks;
   }
@@ -106,6 +112,14 @@ export class LivePractice {
   private onFrame(frame: AudioFrame): void {
     if (this.stopped) return;
     this.buffer.push(frame);
+    // Backpressure valve: if the engine can't keep up (e.g. Basic Pitch inference
+    // in chord mode runs slower than real time on a weak device), the queue would
+    // grow without bound and latency would climb forever. Cap it and drop the
+    // OLDEST frames — a bounded lag beats an ever-growing one.
+    const MAX_BUFFER_FRAMES = WINDOW_FRAMES * 8;
+    if (this.buffer.length > MAX_BUFFER_FRAMES) {
+      this.buffer.splice(0, this.buffer.length - MAX_BUFFER_FRAMES);
+    }
     void this.pump();
   }
 

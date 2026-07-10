@@ -335,3 +335,87 @@ export class SimSource implements FrameSource {
     this.timers = [];
   }
 }
+
+// ---------------------------------------------------------------------------
+// ChordSource — synthetic polyphonic test signal (mic-less MOTOR 2 check)
+// ---------------------------------------------------------------------------
+
+/** Options for {@link ChordSource}. */
+export interface ChordOptions {
+  /** Sample rate of the synthesized audio (default 44100). */
+  sampleRate?: number;
+  /** How long to sustain the chord, in seconds (default 3). */
+  durationSec?: number;
+}
+
+/**
+ * Emits a sustained, harmonically-rich chord as audio frames, so the real
+ * MOTOR 2 (Basic Pitch) can be exercised end-to-end in the browser WITHOUT a
+ * microphone or a physical piano. Unlike {@link SimSource} (which collapses to a
+ * monophonic melody), this deliberately sounds several pitches at once — the
+ * whole point of MOTOR 2.
+ *
+ * Each note is a fundamental plus a few decaying harmonics, which reads to Basic
+ * Pitch far more like a piano than a bare sine would.
+ */
+export class ChordSource implements FrameSource {
+  readonly label = "chord test";
+
+  private readonly midis: number[];
+  private readonly sampleRate: number;
+  private readonly durationSec: number;
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private running = false;
+
+  constructor(midis: number[] = [60, 64, 67], opts: ChordOptions = {}) {
+    this.midis = midis;
+    this.sampleRate = opts.sampleRate ?? 44100;
+    this.durationSec = opts.durationSec ?? 3;
+  }
+
+  async start(onFrame: (frame: AudioFrame) => void): Promise<void> {
+    this.running = true;
+    const totalFrames = Math.ceil((this.durationSec * this.sampleRate) / FRAME_SIZE);
+    const frameDurSec = FRAME_SIZE / this.sampleRate;
+    // Emit one LivePractice window (4 frames) per tick, in near-real-time, so
+    // the detector's rolling ~2 s buffer fills just as it would from a mic.
+    const framesPerTick = 4;
+    let emitted = 0;
+    this.timer = setInterval(() => {
+      if (!this.running) return;
+      for (let k = 0; k < framesPerTick && emitted < totalFrames; k++, emitted++) {
+        const timeSec = emitted * frameDurSec;
+        onFrame({ samples: this.synthesize(timeSec), sampleRate: this.sampleRate, timeSec });
+      }
+      if (emitted >= totalFrames) this.stop();
+    }, framesPerTick * frameDurSec * 1000);
+  }
+
+  /** One frame: the sum of every chord tone, each with decaying harmonics. */
+  private synthesize(startSec: number): Float32Array {
+    const samples = new Float32Array(FRAME_SIZE);
+    const harmonics = [1, 0.5, 0.25, 0.125]; // fundamental + 3 partials
+    // Normalize so the summed chord stays well clear of clipping.
+    const norm = 0.7 / (this.midis.length * harmonics.reduce((a, b) => a + b, 0));
+    for (const midi of this.midis) {
+      const hz = midiToHz(midi);
+      for (let i = 0; i < FRAME_SIZE; i++) {
+        const t = startSec + i / this.sampleRate;
+        let s = 0;
+        for (let h = 0; h < harmonics.length; h++) {
+          s += harmonics[h] * Math.sin(2 * Math.PI * hz * (h + 1) * t);
+        }
+        samples[i] += s * norm;
+      }
+    }
+    return samples;
+  }
+
+  stop(): void {
+    this.running = false;
+    if (this.timer !== null) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+  }
+}

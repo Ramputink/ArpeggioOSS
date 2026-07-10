@@ -21,3 +21,6 @@ services/omr/.native/
 
 # OS
 .DS_Store
+
+# Basic Pitch model is a build artifact (copied from node_modules by build.mjs)
+apps/web/public/models/

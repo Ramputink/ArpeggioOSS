@@ -42,7 +42,11 @@
     <div class="controls">
       <button id="listen" class="btn primary">🎤 Start practice</button>
       <button id="simulate" class="btn">▶ Simulate (no mic)</button>
+      <button id="chordTest" class="btn">🎹 Test MOTOR 2 (chord)</button>
       <button id="stop" class="btn ghost" disabled>■ Stop</button>
+      <label class="chk" title="Detect chords with MOTOR 2 (Basic Pitch). Off = monophonic melody (YIN) only.">
+        <input type="checkbox" id="chordMode" /> Chord mode (MOTOR 2)
+      </label>
       <span class="seg" id="hands">
         <button data-h="both" class="on">Both</button>
         <button data-h="right">Right</button>
@@ -61,14 +65,16 @@
       <div class="hud-cell"><div class="k">Measure</div><div class="v" id="hudMeasure">—</div></div>
       <div class="hud-cell"><div class="k">Accuracy</div><div class="v" id="hudAcc">—</div></div>
       <div class="hud-cell"><div class="k">Last</div><div class="v" id="hudLast">—</div></div>
+      <div class="hud-cell wide"><div class="k">MOTOR 2 (poly)</div><div class="v" id="hudEngine">—</div></div>
       <div class="hud-cell wide"><div class="k">Practice next</div><div class="v" id="hudNext">—</div></div>
     </div>
   </section>
 </main>
 
 <footer class="foot">
-  Monophonic melody practice runs on-device (YIN). Chords use MOTOR 2 (stub here).
-  Microphone needs a secure context (localhost or HTTPS).
+  Monophonic melody practice runs on-device (YIN). Chord mode transcribes
+  polyphony with MOTOR 2 (Spotify Basic Pitch, in-browser). Microphone needs a
+  secure context (localhost or HTTPS).
 </footer>
 
 <script type="module" src="./app.js"></script>

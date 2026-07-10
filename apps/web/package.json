@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@arpeggio/musicxml-parser": "0.1.0",
-    "@arpeggio/practice-engine": "0.1.0"
+    "@arpeggio/practice-engine": "0.1.0",
+    "@arpeggio/motor2-basicpitch": "0.1.0"
   },
   "devDependencies": {
     "esbuild": "^0.24.0",

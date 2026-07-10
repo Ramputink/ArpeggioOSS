@@ -8,6 +8,7 @@
     "packages/musicxml-parser",
     "packages/omr-client",
     "packages/practice-engine",
+    "packages/motor2-basicpitch",
     "apps/web"
   ],
   "scripts": {
