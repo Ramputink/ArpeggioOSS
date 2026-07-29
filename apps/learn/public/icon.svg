@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Arpeggio">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#f7c65c"/>
+      <stop offset="1" stop-color="#d0821f"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#g)"/>
+  <g transform="translate(76 150)">
+    <!-- Seven white keys with three black keys over them: the app in one glyph. -->
+    <rect x="0" y="0" width="360" height="212" rx="16" fill="#fdfbf6"/>
+    <g stroke="#c9a978" stroke-width="5">
+      <path d="M51.4 8 V204 M102.9 8 V204 M154.3 8 V204 M205.7 8 V204 M257.1 8 V204 M308.6 8 V204"/>
+    </g>
+    <g fill="#221704">
+      <rect x="34" y="0" width="35" height="126" rx="9"/>
+      <rect x="86" y="0" width="35" height="126" rx="9"/>
+      <rect x="188" y="0" width="35" height="126" rx="9"/>
+    </g>
+  </g>
+</svg>

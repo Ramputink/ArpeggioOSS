@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <!-- viewport-fit=cover + safe-area insets keep the keyboard clear of the
+       iPhone home indicator when the PWA runs full screen. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#0b0e14" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#f6f7fc" media="(prefers-color-scheme: light)" />
+  <meta name="description" content="Aprende piano desde cero con partituras animadas." />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Arpeggio" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="./icon-180.png" />
+  <link rel="stylesheet" href="./styles.css" />
+  <title>Arpeggio — aprende piano</title>
+</head>
+<body>
+
+<!-- ===================== Library ===================== -->
+<section id="library" class="screen">
+  <header class="lib-head">
+    <div class="brand">
+      <span class="glyph">🎹</span>
+      <div>
+        <h1>Arpeggio</h1>
+        <p class="sub">Aprende piano desde cero</p>
+      </div>
+    </div>
+    <button id="themeBtn" class="ghost round" aria-label="Cambiar tema">◐</button>
+  </header>
+
+  <div id="hero" class="hero hidden"></div>
+
+  <div id="songList" class="list"></div>
+
+  <footer class="lib-foot">
+    <p>Diez piezas de dominio público, de la más fácil a la más difícil.
+       Empieza por <strong>María tenía un corderito</strong>: solo usa tres dedos.</p>
+    <p class="tiny">Arpeggio OSS · AGPL-3.0 · funciona sin conexión</p>
+  </footer>
+</section>
+
+<!-- ===================== Play ===================== -->
+<section id="play" class="screen hidden">
+  <header class="play-head">
+    <button id="back" class="ghost round" aria-label="Volver">‹</button>
+    <div class="ptitle">
+      <strong id="playTitle">—</strong>
+      <span id="playMeta" class="sub"></span>
+    </div>
+    <button id="namesBtn" class="ghost round on" aria-label="Mostrar nombres de las notas">DO</button>
+  </header>
+
+  <div class="progress"><i id="progressBar"></i></div>
+
+  <div class="staff-wrap">
+    <canvas id="staff"></canvas>
+  </div>
+
+  <div id="status" class="status">Preparado</div>
+
+  <div id="keyboard" class="keyboard"></div>
+</section>
+
+<!-- ===================== Setup sheet ===================== -->
+<div id="setup" class="sheet hidden">
+  <div class="sheet-card">
+    <div class="grabber"></div>
+    <h2 id="setupTitle">—</h2>
+    <p id="setupTip" class="tip"></p>
+
+    <div class="field">
+      <span class="flabel">¿Cómo vas a tocar?</span>
+      <div class="segmented" id="modeSel">
+        <button data-mode="keys" class="on">🎹 En la pantalla</button>
+        <button data-mode="mic">🎤 Mi piano</button>
+        <button data-mode="demo">▶︎ Escuchar</button>
+      </div>
+      <p id="modeHelp" class="hint">Toca las teclas del móvil. No necesitas piano.</p>
+    </div>
+
+    <div class="field">
+      <span class="flabel">Manos</span>
+      <div class="segmented" id="handSel">
+        <button data-hand="right" class="on">Derecha</button>
+        <button data-hand="left">Izquierda</button>
+        <button data-hand="both">Las dos</button>
+      </div>
+    </div>
+
+    <div class="field" id="tempoField">
+      <span class="flabel">Velocidad · <b id="bpmOut">90</b> ppm</span>
+      <input id="tempo" type="range" min="40" max="140" step="2" value="90" />
+    </div>
+
+    <button id="go" class="cta">Empezar</button>
+    <button id="cancel" class="ghost wide">Cancelar</button>
+  </div>
+</div>
+
+<!-- ===================== Result sheet ===================== -->
+<div id="result" class="sheet hidden">
+  <div class="sheet-card center">
+    <div class="grabber"></div>
+    <div id="stars" class="stars">★★★</div>
+    <h2 id="resultTitle">¡Muy bien!</h2>
+    <p id="resultLine" class="tip"></p>
+    <button id="again" class="cta">Otra vez</button>
+    <button id="next" class="ghost wide">Siguiente canción</button>
+    <button id="toLibrary" class="ghost wide">Volver a la biblioteca</button>
+  </div>
+</div>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

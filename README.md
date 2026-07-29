@@ -27,8 +27,23 @@ exercises the whole thing end-to-end.
 | `packages/musicxml-parser/` | MusicXML → internal model + quality report. | TypeScript |
 | `packages/omr-client/` | CLI test client (upload, save, parse, report). | TypeScript |
 | `packages/practice-engine/` | On-device practice core: note detection + score following + feedback (Phases 4–6). | TypeScript |
+| `packages/motor2-basicpitch/` | MOTOR 2: real polyphonic transcription (Spotify Basic Pitch / TF.js). | TypeScript |
+| `packages/practice-web/` | Browser glue shared by both apps: mic capture + the practice pump. | TypeScript |
+| `packages/song-library/` | Ten public-domain beginner pieces in a compact notation → `Score`/MusicXML. | TypeScript |
+| `apps/learn/` | **Arpeggio Learn** — the mobile PWA: animated scrolling notation + on-screen piano. | TypeScript |
+| `apps/web/` | Desktop lab app: import a score (file or OMR) and practise it. | TypeScript |
 | `apps/viewer/` | Self-contained piano-roll viewer of the canonical model (Phase 2). | HTML |
 | `samples/demo.musicxml` | Tiny score for offline parser testing. | — |
+
+### Start here: the learner app
+
+`apps/learn` is the app for an actual beginner and needs no backend, no
+microphone and no piano — see **[`apps/learn/README.md`](apps/learn/README.md)**.
+
+```bash
+npm install && npm run build
+npm run share -w @arpeggio/learn    # HTTPS on your LAN -> open the URL on your phone
+```
 
 Beyond the OMR demo, the repo now includes the algorithmic core of the later
 roadmap phases (render, detection, score following, feedback) — all headless and
