@@ -1,9 +1,26 @@
 # Arpeggio Learn
 
-The mobile app for someone who has never played the piano. Ten public-domain
-pieces, ordered from easiest to hardest, with the notation scrolling under a
-fixed playhead — and an on-screen keyboard, so the whole thing works with
-nothing but a phone.
+The mobile app for someone who has never played the piano. A curriculum of
+public-domain pieces from "three fingers on DO" to Bach and Beethoven, with the
+notation scrolling under a fixed playhead — and an on-screen keyboard, so the
+whole thing works with nothing but a phone.
+
+The six tiers are a path, not a rating; each exists to teach what the next one
+assumes:
+
+| Tier | Teaches | Pieces |
+|---|---|---|
+| 1 · Primeros pasos | Five fingers on C, no black keys | Twinkle, Mary Had a Little Lamb, Ode to Joy, Jingle Bells |
+| 2 · Melodías completas | Hand shifts, dotted rhythms, 3/4, a simple bass | Au clair de la lune, Frère Jacques, London Bridge, Silent Night |
+| 3 · Primeras piezas clásicas | Two hands, black keys, key signatures | Für Elise, Canon in D |
+| 4 · Repertorio clásico | Long melodies, independent voices | Dvořák's Largo, Bach's Minuet in G |
+| 5 · Grandes obras | Continuous arpeggios, triplets | Bach's Prelude in C, Moonlight Sonata (opening) |
+| 6 · Camino al neoclásico | Wide broken-chord left hand under a sung melody | Three original studies |
+
+Level 6 is written for this app rather than transcribed: modern neoclassical
+piano is under copyright, so instead of shipping someone else's piece we teach
+its machinery. Where a left hand is a simplification of the original (Bach's
+Minuet), the song's tip says so.
 
 It is a static PWA: no account, no backend, no network after the first load.
 
@@ -60,6 +77,10 @@ song-library ──(Score)──► main.ts ──► StaffView   (canvas notati
 - `runner.ts` is the only place that knows which input mode is active; the staff
   and keyboard are driven from one progress callback in all three cases.
 - `synth.ts` is a three-partial Web Audio voice — enough to hear pitch.
+- `effects.ts` holds the rewards: a particle pool that renders inside the staff
+  canvas, and DOM confetti for the result sheet. See
+  [`docs/ANIMATIONS.md`](../../docs/ANIMATIONS.md) for the full animation design
+  and what is planned next (waterfall mode, hand colouring, section loops).
 
 TensorFlow.js (1.9 MB) is behind a dynamic import: it is fetched only when you
 start a microphone session on a piece that actually has chords.
@@ -73,10 +94,11 @@ notation — one line per hand:
 C4 C4 G4 G4 | A4 A4 G4:2 | F4 F4 E4 E4 | D4 D4 C4:2
 ```
 
-`C4` is a quarter note, `:2` sets the duration in quarter-note beats, `r:2` is a
-rest, `C3+E3+G3:4` is a chord, and `|` closes a bar. **Every bar is checked
-against the time signature at parse time**, so a mistyped duration fails
-`npm test` instead of quietly desynchronising the follower.
+`C4` is a quarter note, `:2` sets the duration in quarter-note beats, `:1/3` is
+a triplet eighth, `r:2` is a rest, `C3+E3+G3:4` is a chord, and `|` closes a
+bar. **Every bar is checked against the time signature at parse time**, so a
+mistyped duration fails `npm test` instead of quietly desynchronising the
+follower.
 
 Only public-domain music, please: traditional tunes, or composers dead more than
 a century.

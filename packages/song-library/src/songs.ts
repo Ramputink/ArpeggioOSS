@@ -11,7 +11,7 @@
  * Bar lines in the notation are load-bearing: every bar is checked against the
  * time signature at parse time, so a wrong duration fails `npm test`.
  */
-import type { Song } from "./types.js";
+import type { Level, Song } from "./types.js";
 
 export const SONGS: Song[] = [
   // --- Level 1 — five-finger C position, right hand -------------------------
@@ -166,6 +166,10 @@ export const SONGS: Song[] = [
   },
 
   // --- Level 3 — accidentals and two real hands -----------------------------
+  //
+  // From here on the pieces are real repertoire. Where a left hand is a
+  // simplification of the original it says so in the `tip`, so nobody is misled
+  // into thinking they are playing the urtext.
   {
     id: "fur-elise",
     title: "Para Elisa (tema)",
@@ -205,6 +209,171 @@ export const SONGS: Song[] = [
       "D3:2 A2:2 | B2:2 F#2:2 | G2:2 D2:2 | G2:2 A2:2 | " +
       "D3:2 A2:2 | B2:2 F#2:2 | G2:2 D2:2 | G2:2 A2:2",
   },
+
+  // --- Level 4 — classical repertoire, as written ---------------------------
+  {
+    id: "dvorak-largo",
+    title: "Largo del Nuevo Mundo",
+    composer: "Antonín Dvořák",
+    level: 4,
+    bpm: 56,
+    beats: 4,
+    beatType: 4,
+    sharps: 0,
+    tip: "Muy lento y ligado: cada nota tiene que durar hasta que empiece la siguiente. Es la melodía más cantable de todo el repertorio.",
+    right:
+      "E4:1.5 G4:0.5 G4:2 | E4:1.5 D4:0.5 C4:2 | D4 E4 D4 C4 | A3:2 G3:2 | " +
+      "E4:1.5 G4:0.5 G4:2 | E4:1.5 D4:0.5 C4:2 | D4 E4 D4 C4 | C4:4",
+    left: "C3:4 | C3:4 | G2:4 | G2:4 | C3:4 | C3:4 | G2:4 | C3:4",
+  },
+  {
+    id: "bach-minuet",
+    title: "Minueto en Sol",
+    composer: "J. S. Bach / Christian Petzold",
+    level: 4,
+    bpm: 108,
+    beats: 3,
+    beatType: 4,
+    sharps: 1,
+    tip: "La mano derecha es la de Bach, nota por nota; la izquierda es un bajo simplificado para que puedas tocarlo ya. Hay un FA♯ en la armadura: siempre tecla negra.",
+    right:
+      "D5:1 G4:0.5 A4:0.5 B4:0.5 C5:0.5 | D5:1 G4:1 G4:1 | " +
+      "E5:1 C5:0.5 D5:0.5 E5:0.5 F#5:0.5 | G5:1 G4:1 G4:1 | " +
+      "C5:1 D5:0.5 C5:0.5 B4:0.5 A4:0.5 | B4:1 C5:0.5 B4:0.5 A4:0.5 G4:0.5 | " +
+      "F#4:1 G4:0.5 A4:0.5 B4:0.5 G4:0.5 | A4:3 | " +
+      "D5:1 G4:0.5 A4:0.5 B4:0.5 C5:0.5 | D5:1 G4:1 G4:1 | " +
+      "E5:1 C5:0.5 D5:0.5 E5:0.5 F#5:0.5 | G5:1 G4:1 G4:1 | " +
+      "C5:1 D5:0.5 C5:0.5 B4:0.5 A4:0.5 | B4:1 C5:0.5 B4:0.5 A4:0.5 G4:0.5 | " +
+      "A4:1 B4:0.5 A4:0.5 G4:0.5 F#4:0.5 | G4:3",
+    left:
+      "G2:3 | G2:1.5 D3:1.5 | C3:3 | B2:1.5 G2:1.5 | " +
+      "A2:3 | G2:1.5 D3:1.5 | D3:3 | D3:1.5 A2:1.5 | " +
+      "G2:3 | G2:1.5 D3:1.5 | C3:3 | B2:1.5 G2:1.5 | " +
+      "A2:3 | G2:1.5 D3:1.5 | D3:3 | G2:3",
+  },
+
+  // --- Level 5 — the big ones -----------------------------------------------
+  {
+    id: "bach-prelude",
+    title: "Preludio nº 1 en Do",
+    composer: "J. S. Bach (BWV 846)",
+    level: 5,
+    bpm: 63,
+    beats: 4,
+    beatType: 4,
+    sharps: 0,
+    tip: "Los cuatro primeros compases. No hay melodía: solo un arpegio que se repite dos veces por compás. Mantén la mano quieta y deja que suenen todas las notas.",
+    // Each half bar is one figure: two low notes, then the right hand's six
+    // sixteenths. Written out rather than repeated so the follower sees every note.
+    right:
+      "r:0.5 G4:0.25 C5:0.25 E5:0.25 G4:0.25 C5:0.25 E5:0.25 " +
+      "r:0.5 G4:0.25 C5:0.25 E5:0.25 G4:0.25 C5:0.25 E5:0.25 | " +
+      "r:0.5 A4:0.25 D5:0.25 F5:0.25 A4:0.25 D5:0.25 F5:0.25 " +
+      "r:0.5 A4:0.25 D5:0.25 F5:0.25 A4:0.25 D5:0.25 F5:0.25 | " +
+      "r:0.5 G4:0.25 D5:0.25 F5:0.25 G4:0.25 D5:0.25 F5:0.25 " +
+      "r:0.5 G4:0.25 D5:0.25 F5:0.25 G4:0.25 D5:0.25 F5:0.25 | " +
+      "r:0.5 G4:0.25 C5:0.25 E5:0.25 G4:0.25 C5:0.25 E5:0.25 " +
+      "r:0.5 G4:0.25 C5:0.25 E5:0.25 G4:0.25 C5:0.25 E5:0.25",
+    left:
+      "C3:0.25 E3:0.25 r:1.5 C3:0.25 E3:0.25 r:1.5 | " +
+      "C3:0.25 D3:0.25 r:1.5 C3:0.25 D3:0.25 r:1.5 | " +
+      "B2:0.25 D3:0.25 r:1.5 B2:0.25 D3:0.25 r:1.5 | " +
+      "C3:0.25 E3:0.25 r:1.5 C3:0.25 E3:0.25 r:1.5",
+  },
+  {
+    id: "moonlight",
+    title: "Claro de Luna (inicio)",
+    composer: "Ludwig van Beethoven",
+    level: 5,
+    bpm: 50,
+    beats: 4,
+    beatType: 4,
+    sharps: 4,
+    tip: "Cuatro compases de tresillos: tres notas por pulso, sin acentuar ninguna. Cuatro sostenidos en la armadura. Toca muy despacio y muy suave.",
+    right:
+      "G#3:1/3 C#4:1/3 E4:1/3 G#3:1/3 C#4:1/3 E4:1/3 G#3:1/3 C#4:1/3 E4:1/3 G#3:1/3 C#4:1/3 E4:1/3 | " +
+      "G#3:1/3 C#4:1/3 E4:1/3 G#3:1/3 C#4:1/3 E4:1/3 G#3:1/3 C#4:1/3 E4:1/3 G#3:1/3 C#4:1/3 E4:1/3 | " +
+      "A3:1/3 C#4:1/3 E4:1/3 A3:1/3 C#4:1/3 E4:1/3 A3:1/3 D4:1/3 F#4:1/3 A3:1/3 D4:1/3 F#4:1/3 | " +
+      "G#3:1/3 C4:1/3 F#4:1/3 G#3:1/3 C4:1/3 F#4:1/3 G#3:1/3 C#4:1/3 E4:1/3 G#3:1/3 C#4:1/3 E4:1/3",
+    left:
+      "C#2+C#3:4 | C#2+C#3:4 | A1+A2:2 F#1+F#2:2 | G#1+G#2:4",
+  },
+
+  // --- Level 6 — original studies on the way to neoclassical piano ----------
+  //
+  // These three are written for this app (AGPL, like the rest of the repo), not
+  // transcribed. Modern neoclassical piano is under copyright, so instead of
+  // shipping someone else's piece we teach its machinery: a wide broken-chord
+  // left hand under a slow melody, which is the whole idiom.
+  {
+    id: "study-arpeggios",
+    title: "Estudio 1 · Arpegios",
+    composer: "Estudio original de Arpeggio",
+    level: 6,
+    bpm: 60,
+    beats: 4,
+    beatType: 4,
+    sharps: 0,
+    tip: "La izquierda repite un arpegio de cuatro notas mientras la derecha canta notas largas. Es el motor de casi todo el piano neoclásico.",
+    right:
+      "E5:4 | F5:2 E5:2 | E5:2 G5:2 | D5:4 | " +
+      "C5:4 | A4:2 C5:2 | B4:2 D5:2 | A4:4",
+    left:
+      "A2:0.5 E3:0.5 A3:0.5 C4:0.5 A2:0.5 E3:0.5 A3:0.5 C4:0.5 | " +
+      "F2:0.5 C3:0.5 F3:0.5 A3:0.5 F2:0.5 C3:0.5 F3:0.5 A3:0.5 | " +
+      "C3:0.5 G3:0.5 C4:0.5 E4:0.5 C3:0.5 G3:0.5 C4:0.5 E4:0.5 | " +
+      "G2:0.5 D3:0.5 G3:0.5 B3:0.5 G2:0.5 D3:0.5 G3:0.5 B3:0.5 | " +
+      "A2:0.5 E3:0.5 A3:0.5 C4:0.5 A2:0.5 E3:0.5 A3:0.5 C4:0.5 | " +
+      "F2:0.5 C3:0.5 F3:0.5 A3:0.5 F2:0.5 C3:0.5 F3:0.5 A3:0.5 | " +
+      "G2:0.5 D3:0.5 G3:0.5 B3:0.5 G2:0.5 D3:0.5 G3:0.5 B3:0.5 | " +
+      "A2:0.5 E3:0.5 A3:0.5 C4:0.5 A2:0.5 E3:0.5 A3:0.5 C4:0.5",
+  },
+  {
+    id: "study-open-fifths",
+    title: "Estudio 2 · Quintas abiertas",
+    composer: "Estudio original de Arpeggio",
+    level: 6,
+    bpm: 66,
+    beats: 3,
+    beatType: 4,
+    sharps: -1,
+    tip: "Un bemol en la armadura (SI♭). La izquierda abre la mano hasta la décima: no estires, mueve el brazo entero.",
+    right:
+      "D5:2 F5:1 | D5:3 | C5:2 A4:1 | A4:3 | " +
+      "F5:2 A5:1 | G5:3 | E5:2 D5:1 | D5:3",
+    left:
+      "D2:0.5 A2:0.5 D3:0.5 F3:0.5 D3:0.5 A2:0.5 | " +
+      "Bb1:0.5 F2:0.5 Bb2:0.5 D3:0.5 Bb2:0.5 F2:0.5 | " +
+      "F2:0.5 C3:0.5 F3:0.5 A3:0.5 F3:0.5 C3:0.5 | " +
+      "C2:0.5 G2:0.5 C3:0.5 E3:0.5 C3:0.5 G2:0.5 | " +
+      "D2:0.5 A2:0.5 D3:0.5 F3:0.5 D3:0.5 A2:0.5 | " +
+      "Bb1:0.5 F2:0.5 Bb2:0.5 D3:0.5 Bb2:0.5 F2:0.5 | " +
+      "F2:0.5 C3:0.5 F3:0.5 A3:0.5 F3:0.5 C3:0.5 | " +
+      "D2:0.5 A2:0.5 D3:0.5 F3:0.5 D3:0.5 A2:0.5",
+  },
+  {
+    id: "study-nocturne",
+    title: "Estudio 3 · Nocturno",
+    composer: "Estudio original de Arpeggio",
+    level: 6,
+    bpm: 58,
+    beats: 4,
+    beatType: 4,
+    sharps: 1,
+    tip: "Estilo nocturno: izquierda muy ancha y suave, derecha cantando por encima. Prepara el terreno para Chopin de verdad.",
+    right:
+      "B4:2 E5:1.5 D5:0.5 | E5:3 F#5:1 | G5:2 F#5:1 E5:1 | F#5:4 | " +
+      "B4:2 E5:1.5 D5:0.5 | E5:3 G5:1 | F#5:2 D#5:1 F#5:1 | E5:4",
+    left:
+      "E2:0.5 B2:0.5 E3:0.5 G3:0.5 E2:0.5 B2:0.5 E3:0.5 G3:0.5 | " +
+      "A2:0.5 E3:0.5 A3:0.5 C4:0.5 A2:0.5 E3:0.5 A3:0.5 C4:0.5 | " +
+      "E2:0.5 B2:0.5 E3:0.5 G3:0.5 E2:0.5 B2:0.5 E3:0.5 G3:0.5 | " +
+      "B2:0.5 F#3:0.5 B3:0.5 D#4:0.5 B2:0.5 F#3:0.5 B3:0.5 D#4:0.5 | " +
+      "E2:0.5 B2:0.5 E3:0.5 G3:0.5 E2:0.5 B2:0.5 E3:0.5 G3:0.5 | " +
+      "A2:0.5 E3:0.5 A3:0.5 C4:0.5 A2:0.5 E3:0.5 A3:0.5 C4:0.5 | " +
+      "B2:0.5 F#3:0.5 B3:0.5 D#4:0.5 B2:0.5 F#3:0.5 B3:0.5 D#4:0.5 | " +
+      "E2:0.5 B2:0.5 E3:0.5 G3:0.5 E2:0.5 B2:0.5 E3:0.5 G3:0.5",
+  },
 ];
 
 /** Look a song up by its slug. */
@@ -212,9 +381,22 @@ export function songById(id: string): Song | undefined {
   return SONGS.find((s) => s.id === id);
 }
 
-/** Display names for the three difficulty tiers (Spanish UI copy). */
-export const LEVEL_NAMES: Record<1 | 2 | 3, string> = {
+/** Display names for the difficulty tiers (Spanish UI copy). */
+export const LEVEL_NAMES: Record<Level, string> = {
   1: "Primeros pasos",
   2: "Melodías completas",
-  3: "Pequeños retos",
+  3: "Primeras piezas clásicas",
+  4: "Repertorio clásico",
+  5: "Grandes obras",
+  6: "Camino al neoclásico",
+};
+
+/** What each tier teaches — shown under its heading so the path is explicit. */
+export const LEVEL_GOALS: Record<Level, string> = {
+  1: "Cinco dedos sobre DO-RE-MI-FA-SOL, sin teclas negras y sin mover la mano.",
+  2: "Cambios de posición, ritmos con puntillo, compás de 3/4 y un bajo sencillo.",
+  3: "Las dos manos a la vez, teclas negras y armadura.",
+  4: "Bach y Dvořák tal como se escribieron: melodías largas y voces independientes.",
+  5: "Arpegios continuos y tresillos. Aquí ya estás tocando piezas de concierto.",
+  6: "Arpegios abiertos bajo una melodía lenta: la mecánica del piano neoclásico.",
 };

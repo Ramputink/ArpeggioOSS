@@ -173,10 +173,18 @@ export class KeyboardView {
    * comfortable fixed width (with horizontal scrolling) when it is not — a
    * two-octave piece would otherwise produce keys too narrow to hit.
    */
+  /** Re-measure and re-size the keys (after the screen becomes visible). */
+  relayout(): void {
+    this.layout();
+  }
+
   private layout(): void {
     const whiteCount = [...this.keys.values()].filter((el) => el.classList.contains("white")).length;
     if (whiteCount === 0) return;
     const available = this.scroller.clientWidth;
+    // A hidden play screen measures 0 wide, which would freeze every key at the
+    // minimum width even on a desktop. Wait to be measured for real instead.
+    if (available === 0) return;
     const MIN_KEY = 44;
     const keyW = Math.max(MIN_KEY, available / whiteCount);
     const blackW = keyW * 0.62;

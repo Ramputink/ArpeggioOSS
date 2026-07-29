@@ -12,8 +12,15 @@
  * only has to touch this one field group.
  */
 
-/** Difficulty tier used to group the library on the home screen. */
-export type Level = 1 | 2 | 3;
+/**
+ * Difficulty tier used to group the library on the home screen.
+ *
+ * The tiers are a curriculum, not a rating: each one exists to teach the skill
+ * the next one assumes. Levels 1–3 build a working right hand and a supporting
+ * left; 4–5 are real classical repertoire as written; 6 is the neoclassical
+ * idiom (wide left-hand arpeggios under a sung melody) the learner is aiming at.
+ */
+export type Level = 1 | 2 | 3 | 4 | 5 | 6;
 
 export interface Song {
   /** Stable slug; also the localStorage key for progress. */

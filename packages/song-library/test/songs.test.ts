@@ -12,6 +12,7 @@ import test from "node:test";
 import { parseMusicXML } from "@arpeggio/musicxml-parser";
 
 import {
+  LEVEL_GOALS,
   LEVEL_NAMES,
   SONGS,
   beatsPerBar,
@@ -65,9 +66,18 @@ test("parseVoice expands chords onto one onset", () => {
   assert.deepEqual(v.events.map((e) => e.pitchMidi), [48, 52, 55]);
 });
 
-test("the library has ten unique, well-formed songs", () => {
-  assert.equal(SONGS.length, 10);
-  assert.equal(new Set(SONGS.map((s) => s.id)).size, 10);
+test("the library is a well-formed, progressive curriculum", () => {
+  assert.ok(SONGS.length >= 10, "the starter library must stay substantial");
+  assert.equal(new Set(SONGS.map((s) => s.id)).size, SONGS.length, "duplicate song id");
+  // Songs are listed in teaching order, so levels must never go backwards.
+  for (let i = 1; i < SONGS.length; i++) {
+    assert.ok(SONGS[i].level >= SONGS[i - 1].level, `${SONGS[i].id} is out of order`);
+  }
+  // Every tier that has a name must have at least one piece in it.
+  for (const level of [1, 2, 3, 4, 5, 6] as const) {
+    assert.ok(SONGS.some((s) => s.level === level), `level ${level} is empty`);
+    assert.ok(LEVEL_GOALS[level].length > 20, `level ${level} has no stated goal`);
+  }
   for (const song of SONGS) {
     assert.ok(LEVEL_NAMES[song.level], `${song.id}: unknown level`);
     assert.ok(song.tip.length > 20, `${song.id}: tip too short to help`);
@@ -81,7 +91,12 @@ test("every song compiles to a score with sane, ordered events", () => {
     const score = songToScore(song);
     assert.ok(score.events.length > 10, `${song.id}: suspiciously short`);
     for (let i = 1; i < score.events.length; i++) {
-      assert.ok(score.events[i].onset >= score.events[i - 1].onset, `${song.id}: unordered`);
+      // Simultaneous notes are ordered by pitch, and "simultaneous" is a
+      // tolerance — a voice full of triplets lands a few ulps off its bar line.
+      assert.ok(
+        score.events[i].onset >= score.events[i - 1].onset - 1e-6,
+        `${song.id}: unordered at ${i}`,
+      );
     }
     for (const e of score.events) {
       assert.ok(e.pitchMidi >= 21 && e.pitchMidi <= 108, `${song.id}: pitch off the keyboard`);
@@ -120,7 +135,12 @@ test("both hands of a song cover the same span of bars", () => {
     const r = parseVoice(song.right, { hand: "right", staff: 1, voice: 1, beatsPerBar: perBar, pickupBeats: song.pickupBeats });
     const l = parseVoice(song.left!, { hand: "left", staff: 2, voice: 2, beatsPerBar: perBar, pickupBeats: song.pickupBeats });
     assert.equal(r.bars, l.bars, `${song.id}: hands have a different number of bars`);
-    assert.equal(r.totalBeats, l.totalBeats, `${song.id}: hands have a different length`);
+    // Tolerance, not equality: a bar of triplets sums to 4 only to within
+    // double-precision rounding, and that is fine — it is far below a tick.
+    assert.ok(
+      Math.abs(r.totalBeats - l.totalBeats) < 1e-6,
+      `${song.id}: hands have a different length (${r.totalBeats} vs ${l.totalBeats})`,
+    );
   }
 });
 

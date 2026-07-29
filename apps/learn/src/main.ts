@@ -10,14 +10,17 @@
  * in `runner.ts` (judging), `staff.ts` (notation) and `keyboard.ts` (input).
  */
 import {
+  LEVEL_GOALS,
   LEVEL_NAMES,
   SONGS,
   beatsPerBar,
   songToScore,
   type HandChoice,
+  type Level,
   type Song,
 } from "@arpeggio/song-library";
 
+import { confetti } from "./effects.js";
 import { KeyboardView } from "./keyboard.js";
 import { Runner, type PracticeMode, type RunSummary } from "./runner.js";
 import { StaffView, noteName, type Clef, type StaffNote } from "./staff.js";
@@ -77,13 +80,18 @@ function renderLibrary(): void {
   const list = $("songList");
   list.replaceChildren();
 
-  ([1, 2, 3] as const).forEach((level) => {
+  ([1, 2, 3, 4, 5, 6] as Level[]).forEach((level) => {
     const songs = SONGS.filter((s) => s.level === level);
     if (songs.length === 0) return;
     const group = document.createElement("section");
     group.className = "group";
     const h2 = document.createElement("h2");
     h2.textContent = LEVEL_NAMES[level];
+    // State what the tier teaches, so the library reads as a path rather than
+    // as a pile of songs.
+    const goal = document.createElement("p");
+    goal.className = "goal";
+    goal.textContent = LEVEL_GOALS[level];
     const cards = document.createElement("div");
     cards.className = "cards";
 
@@ -102,7 +110,7 @@ function renderLibrary(): void {
       card.addEventListener("click", () => openSetup(s));
       cards.append(card);
     }
-    group.append(h2, cards);
+    group.append(h2, goal, cards);
     list.append(group);
   });
 
@@ -241,8 +249,17 @@ async function startPractice(): Promise<void> {
   $("progressBar").style.width = "0%";
   $("library").classList.add("hidden");
   $("play").classList.remove("hidden");
+  // The keyboard was built while this screen was still hidden (and therefore
+  // zero-width); now that it is on screen, size the keys to the real viewport.
+  keyboard.relayout();
+  streak = 0;
+  showCombo(0);
 
   try {
+    // Count in at the tempo of the piece: the learner feels the pulse before
+    // the first note instead of guessing it.
+    await countIn(prefs.mode === "demo" ? bpm : song.bpm);
+    if (!runner) return; // the learner left during the count-in
     await runner.start();
   } catch (e) {
     // Almost always a denied microphone permission.
@@ -253,6 +270,44 @@ async function startPractice(): Promise<void> {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+/** Consecutive correct notes, for the streak counter. */
+let streak = 0;
+
+/** "3 · 2 · 1", one number per beat at the piece's tempo, with a click. */
+async function countIn(bpm: number): Promise<void> {
+  const el = $("countdown");
+  const digit = el.querySelector("span");
+  if (!digit) return;
+  const beatMs = Math.min(900, Math.max(320, 60000 / bpm));
+  el.classList.remove("hidden");
+  for (const n of [3, 2, 1]) {
+    digit.textContent = String(n);
+    // Restart the pop animation on each number.
+    digit.style.animation = "none";
+    void digit.offsetWidth;
+    digit.style.animation = "";
+    synth.click(n === 3);
+    await delay(beatMs);
+    if ($("play").classList.contains("hidden")) break; // left the screen
+  }
+  el.classList.add("hidden");
+}
+
+/** Show the streak once it is worth celebrating, and pop it on every increment. */
+function showCombo(count: number): void {
+  const el = $("combo");
+  if (count < 3) {
+    el.classList.remove("on");
+    el.textContent = "";
+    return;
+  }
+  el.textContent = `${count} seguidas 🔥`;
+  el.classList.add("on");
+  el.classList.remove("pop");
+  void el.offsetWidth;
+  el.classList.add("pop");
 }
 
 function handLabel(hand: HandChoice): string {
@@ -300,12 +355,18 @@ function onJudge(event: { kind: string; playedMidi?: number }): void {
   const el = $("status");
   if (event.kind === "correct") {
     if (event.playedMidi !== undefined) keyboard.flash(event.playedMidi, true);
+    // Burst on the note that was under the playhead — this fires before the
+    // cursor advances, so the sparks land where the learner was looking.
+    staff.celebrate();
+    showCombo(++streak);
   } else if (event.kind === "wrong") {
     if (event.playedMidi !== undefined) keyboard.flash(event.playedMidi, false);
     staff.flashWrong();
     el.textContent = "Esa no… mira la tecla iluminada";
     el.className = "status bad";
     promptHeldUntil = Date.now() + 1100;
+    streak = 0;
+    showCombo(0);
   }
 }
 
@@ -321,7 +382,9 @@ function onFinish(summary: RunSummary): void {
   const stars = prefs.mode === "demo" ? 0 : starsFor(recordRun(song.id, summary));
   staff.stop();
   keyboard.setHighlight([]);
-  $("stars").innerHTML = `${"★".repeat(stars)}<span class="off">${"★".repeat(3 - stars)}</span>`;
+  showCombo(0);
+  const won = Array.from({ length: stars }, () => `<span class="won">★</span>`).join("");
+  $("stars").innerHTML = won + `<span class="off">${"★".repeat(3 - stars)}</span>`;
   $("resultTitle").textContent =
     prefs.mode === "demo" ? "Fin de la escucha" : stars === 3 ? "¡Perfecto!" : "¡Muy bien!";
   $("resultLine").textContent =
@@ -330,6 +393,7 @@ function onFinish(summary: RunSummary): void {
       : `${summary.correct} notas correctas · ${Math.round(summary.accuracy * 100)}% de acierto`;
   $("next").classList.toggle("hidden", nextSong() === null);
   $("result").classList.remove("hidden");
+  if (stars === 3) confetti($("result").querySelector<HTMLElement>(".sheet-card")!);
 }
 
 function nextSong(): Song | null {

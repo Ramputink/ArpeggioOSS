@@ -6,7 +6,7 @@
  * network fetch or on the OMR backend: the learner app works fully offline.
  */
 export type { Song, Level, HandChoice } from "./types.js";
-export { SONGS, songById, LEVEL_NAMES } from "./songs.js";
+export { SONGS, songById, LEVEL_NAMES, LEVEL_GOALS } from "./songs.js";
 export {
   songToScore,
   songToMusicXML,

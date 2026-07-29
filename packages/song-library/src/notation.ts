@@ -7,6 +7,7 @@
  *     C4            quarter note (default duration = 1 beat)
  *     F#4:0.5        eighth note; duration is in quarter-note beats
  *     Bb3:1.5        dotted quarter
+ *     E5:1/3         triplet eighth (fractions keep tuplets exact)
  *     r:2            rest of 2 beats (rests only advance the clock)
  *     C3+E3+G3:2     chord — notes sharing one onset
  *     |              bar line (validated against the time signature)
@@ -72,6 +73,18 @@ export function diatonicIndex(midi: number, sharps: number): number {
   return octave * 7 + LETTER_STEP[step];
 }
 
+/**
+ * Read a duration token. Fractions (`1/3`) are accepted so tuplets stay exact:
+ * writing a triplet eighth as `0.333` would drift a bar out of tolerance, while
+ * `1/3` divides at full double precision and three of them still sum to 1.
+ */
+function parseDuration(token: string | undefined): number {
+  if (token === undefined) return 1;
+  const slash = token.indexOf("/");
+  if (slash < 0) return Number(token);
+  return Number(token.slice(0, slash)) / Number(token.slice(slash + 1));
+}
+
 export interface VoiceOptions {
   hand: Hand;
   /** MusicXML staff number (1 = treble/right, 2 = bass/left). */
@@ -82,6 +95,9 @@ export interface VoiceOptions {
   /** Beats in the incomplete opening bar; 0 when the piece starts on a downbeat. */
   pickupBeats?: number;
 }
+
+/** Onsets closer than this (in beats) are the same moment in the music. */
+const SIMULTANEOUS_EPSILON = 1e-6;
 
 export interface ParsedVoice {
   events: NoteEvent[];
@@ -125,7 +141,7 @@ export function parseVoice(source: string, opts: VoiceOptions): ParsedVoice {
       continue;
     }
     const [pitchPart, durPart] = token.split(":");
-    const duration = durPart === undefined ? 1 : Number(durPart);
+    const duration = parseDuration(durPart);
     if (!Number.isFinite(duration) || duration <= 0) {
       throw new Error(`bad duration in token "${token}"`);
     }
@@ -183,7 +199,15 @@ export function songToScore(song: Song, hands: "right" | "left" | "both" = "both
       }).events,
     );
   }
-  voices.sort((a, b) => a.onset - b.onset || a.pitchMidi - b.pitchMidi);
+  // Compare onsets with a tolerance before falling back to pitch. Accumulating
+  // triplets leaves a voice a few ulps off its bar line, and an exact comparison
+  // would order a left-hand note that is simultaneous "after" a right-hand one
+  // purely from that drift — making the note order depend on rounding noise.
+  voices.sort((a, b) =>
+    Math.abs(a.onset - b.onset) < SIMULTANEOUS_EPSILON
+      ? a.pitchMidi - b.pitchMidi
+      : a.onset - b.onset,
+  );
 
   const timeSignatures: TimeSignature[] = [
     { measure: 1, beats: song.beats, beatType: song.beatType },
@@ -207,11 +231,24 @@ export function beatsPerBar(song: Song): number {
 // MusicXML export
 // ---------------------------------------------------------------------------
 
-/** Ticks per quarter note used by the exporter (8 covers 32nds and dots). */
-const DIVISIONS = 8;
+/**
+ * Ticks per quarter note used by the exporter.
+ *
+ * 24 rather than a power of two because the library contains triplets (the
+ * Moonlight Sonata): a triplet eighth is a third of a beat, which 8 ticks per
+ * quarter cannot express without rounding the piece out of time.
+ */
+const DIVISIONS = 24;
 
-/** Map a duration in beats to a MusicXML `<type>` plus dot count. */
-function noteType(beats: number): { type: string; dots: number } {
+interface NoteValue {
+  type: string;
+  dots: number;
+  /** Set for tuplets, e.g. 3 in the time of 2 for triplets. */
+  tuplet?: { actual: number; normal: number };
+}
+
+/** Map a duration in beats to a MusicXML `<type>`, dots and tuplet ratio. */
+function noteType(beats: number): NoteValue {
   const table: Array<[number, string]> = [
     [4, "whole"], [2, "half"], [1, "quarter"], [0.5, "eighth"], [0.25, "16th"],
   ];
@@ -219,9 +256,31 @@ function noteType(beats: number): { type: string; dots: number } {
     if (Math.abs(beats - value) < 1e-6) return { type, dots: 0 };
     if (Math.abs(beats - value * 1.5) < 1e-6) return { type, dots: 1 };
   }
-  // Anything else (a tie would be needed) still exports with a sane type so the
-  // file stays loadable; our library never hits this branch.
+  // Triplets: three in the time of two, so each note is 2/3 of its written value.
+  for (const [value, type] of table) {
+    if (Math.abs(beats - (value * 2) / 3) < 1e-6) {
+      return { type, dots: 0, tuplet: { actual: 3, normal: 2 } };
+    }
+  }
+  // Anything else would need a tie; still export a loadable note.
   return { type: "quarter", dots: 0 };
+}
+
+/** The `<type>`/`<dot>`/`<time-modification>` lines shared by notes and rests. */
+function valueXml(beats: number): string[] {
+  const { type, dots, tuplet } = noteType(beats);
+  return [
+    `        <type>${type}</type>`,
+    ...Array.from({ length: dots }, () => "        <dot/>"),
+    ...(tuplet
+      ? [
+          "        <time-modification>",
+          `          <actual-notes>${tuplet.actual}</actual-notes>`,
+          `          <normal-notes>${tuplet.normal}</normal-notes>`,
+          "        </time-modification>",
+        ]
+      : []),
+  ];
 }
 
 /**
@@ -336,14 +395,12 @@ function measureXml(
 }
 
 function restXml(beats: number, staff: number, voice: number): string[] {
-  const { type, dots } = noteType(beats);
   return [
     "      <note>",
     "        <rest/>",
     `        <duration>${Math.round(beats * DIVISIONS)}</duration>`,
     `        <voice>${voice}</voice>`,
-    `        <type>${type}</type>`,
-    ...Array.from({ length: dots }, () => "        <dot/>"),
+    ...valueXml(beats),
     `        <staff>${staff}</staff>`,
     "      </note>",
   ];
@@ -359,7 +416,6 @@ function pitchedXml(
   // Spelling for export always uses sharps; our sharp-key library never needs
   // flats, and the parser reads either back to the same MIDI number anyway.
   const { step, alter, octave } = midiToSpelling(e.pitchMidi, 0);
-  const { type, dots } = noteType(beats);
   return [
     "      <note>",
     ...(isChordTone ? ["        <chord/>"] : []),
@@ -370,8 +426,7 @@ function pitchedXml(
     "        </pitch>",
     `        <duration>${Math.round(beats * DIVISIONS)}</duration>`,
     `        <voice>${voice}</voice>`,
-    `        <type>${type}</type>`,
-    ...Array.from({ length: dots }, () => "        <dot/>"),
+    ...valueXml(beats),
     `        <staff>${staff}</staff>`,
     "      </note>",
   ];

@@ -114,6 +114,26 @@ export class Synth {
     for (const o of voice.osc) o.stop(end + 0.3);
   }
 
+  /**
+   * A short metronome blip for the count-in. Deliberately a different timbre
+   * from the piano voice (a filtered square, very short) so a count-in beat is
+   * never mistaken for a note of the piece.
+   */
+  click(accent = false): void {
+    if (!this.ctx || !this.master) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = "square";
+    osc.frequency.value = accent ? 1320 : 880;
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.06, t + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    osc.connect(gain).connect(this.master);
+    osc.start(t);
+    osc.stop(t + 0.12);
+  }
+
   /** Silence everything immediately (leaving practice, pressing stop). */
   allOff(): void {
     for (const midi of [...this.voices.keys()]) this.noteOff(midi, undefined, 0.05);

@@ -16,6 +16,8 @@
  * stems, flags, dots, ledger lines, accidentals, bar lines and a key signature.
  */
 
+import { Particles } from "./effects.js";
+
 /** One drawable note, tied back to its index in the follower's expectation list. */
 export interface StaffNote {
   index: number;
@@ -118,6 +120,17 @@ export class StaffView {
   /** performance.now() until which the current note is drawn as a miss. */
   private wrongUntil = 0;
   private raf = 0;
+  /** Timestamp of the previous frame, for particle integration. */
+  private lastFrameMs = 0;
+  private readonly particles = new Particles();
+  /**
+   * Where the note under the playhead was last drawn. Bursts are spawned from
+   * here rather than from the playhead line so the spark lands on the note head
+   * the learner is actually looking at.
+   */
+  private hitPoints: Array<{ x: number; y: number }> = [];
+  /** X of the last note name printed on each staff, to stop labels colliding. */
+  private lastLabelX: number[] = [];
   private palette: Palette = {
     bg: "#0b0e14", line: "#39445a", ink: "#e8ecf3", dim: "#7f8aa0",
     accent: "#f2b441", ok: "#33d6c0", bad: "#ff6b6b",
@@ -139,6 +152,8 @@ export class StaffView {
     // Start with the first note already at the playhead rather than sliding in.
     this.beatTarget = this.beatNow = notes.length ? notes[0].onset : 0;
     this.wrongUntil = 0;
+    this.particles.clear();
+    this.hitPoints = [];
   }
 
   /** Number of expected notes already played (from the follower's state). */
@@ -154,6 +169,13 @@ export class StaffView {
 
   flashWrong(): void {
     this.wrongUntil = performance.now() + 400;
+  }
+
+  /** Spark burst on the note(s) just played correctly. */
+  celebrate(): void {
+    for (const p of this.hitPoints) {
+      this.particles.burst(p.x, p.y, this.palette.ok);
+    }
   }
 
   setShowNames(show: boolean): void {
@@ -224,6 +246,7 @@ export class StaffView {
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = c.bg;
     ctx.fillRect(0, 0, w, h);
+    this.hitPoints = [];
 
     const grand = this.opts.clefs.length > 1;
     const pad = 8;
@@ -284,14 +307,66 @@ export class StaffView {
     }
 
     // --- notes ---
+    // Split by staff first: beaming and note-name spacing are both per-staff.
+    const lanes: StaffNote[][] = staffTops.map(() => []);
     for (const note of this.notes) {
       if (note.offset < firstBeat - 1 || note.onset > lastBeat + 1) continue;
-      const clefIndex = grand && note.hand === "left" ? 1 : 0;
-      const x = toX(note.onset);
-      // Names are centred, so one straddling the gutter would show as a stray
-      // half-letter after the gutter is repainted over it. Drop it instead.
-      this.drawNote(note, staffTops[clefIndex], this.opts.clefs[clefIndex], s, x, x > gutter + 14);
+      lanes[grand && note.hand === "left" ? 1 : 0].push(note);
     }
+    this.lastLabelX = staffTops.map(() => -Infinity);
+
+    lanes.forEach((notes, li) => {
+      const top = staffTops[li];
+      const clef = this.opts.clefs[li];
+      const groups = beamGroups(notes);
+      const beams = new Map<StaffNote, Beam>();
+      for (const group of groups) {
+        const ys = group.map((n) => this.noteY(n, top, clef, s));
+        // One stem direction for the whole group, from where its heads sit.
+        const mean = ys.reduce((sum, y) => sum + y, 0) / ys.length;
+        const stemUp = mean > top + 2 * s;
+        const beamY = stemUp
+          ? Math.min(...ys) - 3.1 * s
+          : Math.max(...ys) + 3.1 * s;
+        // Two beams for sixteenths and shorter, one for eighths and triplets.
+        const lines = group.some((n) => n.offset - n.onset <= 0.3) ? 2 : 1;
+        for (const n of group) beams.set(n, { y: beamY, stemUp, lines });
+      }
+
+      // Chords get no note names: the label sits in a lane under the staff, so
+      // for a stack of heads it would land on top of the lowest one. The status
+      // line already spells the whole chord out in words.
+      const seen = new Set<number>();
+      const chordOnsets = new Set<number>();
+      for (const n of notes) {
+        const key = Math.round(n.onset * 1e6);
+        if (seen.has(key)) chordOnsets.add(key);
+        seen.add(key);
+      }
+
+      for (const note of notes) {
+        const x = toX(note.onset);
+        // Names are centred, so one straddling the gutter would show as a stray
+        // half-letter after the gutter is repainted over it. Drop it instead.
+        const named = x > gutter + 14 && !chordOnsets.has(Math.round(note.onset * 1e6));
+        this.drawNote(note, top, clef, s, x, li, named, beams.get(note));
+      }
+
+      // Beams last so they sit cleanly over the stems they cap.
+      ctx.fillStyle = c.ink;
+      for (const group of groups) {
+        const beam = beams.get(group[0]);
+        if (!beam) continue;
+        const dx = beam.stemUp ? s * 0.6 : -s * 0.6;
+        const x0 = toX(group[0].onset) + dx;
+        const x1 = toX(group[group.length - 1].onset) + dx;
+        const thickness = s * 0.42;
+        for (let i = 0; i < beam.lines; i++) {
+          const y = beam.y + (beam.stemUp ? 1 : -1) * i * thickness * 1.9;
+          ctx.fillRect(Math.min(x0, x1), y - thickness / 2, Math.abs(x1 - x0), thickness);
+        }
+      }
+    });
 
     // --- fixed gutter: repaint over the scrolled music, then clef + key ---
     ctx.fillStyle = c.bg;
@@ -324,6 +399,12 @@ export class StaffView {
     ctx.lineTo(Math.round(playX) + 0.5, h - 2);
     ctx.stroke();
     ctx.lineWidth = 1;
+
+    // Sparks last, so they sit over both the music and the playhead.
+    const now = performance.now();
+    const dt = this.lastFrameMs ? Math.min(0.05, (now - this.lastFrameMs) / 1000) : 0;
+    this.lastFrameMs = now;
+    this.particles.render(ctx, dt);
   }
 
   /** State of a note: everything before the cursor is done; the rest is ahead. */
@@ -332,13 +413,21 @@ export class StaffView {
     return Math.abs(note.onset - this.beatTarget) < 1e-6 ? "current" : "upcoming";
   }
 
+  /** Vertical centre of a note head on a given staff. */
+  private noteY(note: StaffNote, top: number, clef: Clef, s: number): number {
+    const sp = spell(note.midi, this.opts.sharps);
+    return top + 4 * s - (sp.d - BOTTOM_LINE[clef]) * (s / 2);
+  }
+
   private drawNote(
     note: StaffNote,
     top: number,
     clef: Clef,
     s: number,
     x: number,
+    lane: number,
     withName: boolean,
+    beam?: Beam,
   ): void {
     const { ctx, palette: c } = this;
     const sp = spell(note.midi, this.opts.sharps);
@@ -359,6 +448,7 @@ export class StaffView {
 
     // Halo behind the note you have to play right now.
     if (state === "current") {
+      this.hitPoints.push({ x, y });
       ctx.globalAlpha = 0.18;
       ctx.beginPath();
       ctx.arc(x, y, s * 1.5, 0, Math.PI * 2);
@@ -390,19 +480,20 @@ export class StaffView {
     if (filled) ctx.fill();
     else { ctx.lineWidth = 1.8; ctx.stroke(); }
 
-    // Stem (whole notes have none) — up below the middle line, down above it.
+    // Stem (whole notes have none) — up below the middle line, down above it,
+    // unless a beam group has already picked a direction for the whole run.
     if (beats < 4) {
-      const stemUp = sp.d < bottomLine + 4;
+      const stemUp = beam ? beam.stemUp : sp.d < bottomLine + 4;
       const sx = Math.round(x + (stemUp ? s * 0.6 : -s * 0.6)) + 0.5;
-      const sy = y + (stemUp ? -3.3 * s : 3.3 * s);
+      const sy = beam ? beam.y : y + (stemUp ? -3.3 * s : 3.3 * s);
       ctx.lineWidth = 1.6;
       ctx.beginPath();
       ctx.moveTo(sx, y);
       ctx.lineTo(sx, sy);
       ctx.stroke();
-      // Flag for eighths and shorter (no beaming: single flags read fine at
-      // this size and keep every note independently positioned).
-      if (beats <= 0.75) {
+      // A flag only for an unbeamed short note; beamed runs get their beam drawn
+      // across the whole group instead.
+      if (!beam && beats <= 0.75) {
         ctx.beginPath();
         ctx.moveTo(sx, sy);
         ctx.quadraticCurveTo(sx + s * 1.3, sy + (stemUp ? s * 0.9 : -s * 0.9), sx + s * 0.8, sy + (stemUp ? s * 1.9 : -s * 1.9));
@@ -428,15 +519,25 @@ export class StaffView {
       ctx.fillText(acc, x - s * 0.95, y);
     }
 
-    // Note name in a dedicated lane below the system, so it never collides
-    // with stems or ledger lines.
-    if (this.opts.showNames && withName) {
+    // Note name in a dedicated lane below the system. Two guards keep it
+    // legible in dense music: skip a label whose note head hangs down into the
+    // lane, and skip one that would overprint the previous label. Fast passages
+    // therefore lose their labels rather than turning into a smear — which is
+    // also the right teaching order, since by then you are reading the staff.
+    const laneY = top + 4 * s + s * 1.8;
+    if (
+      this.opts.showNames &&
+      withName &&
+      y < laneY - s * 0.8 &&
+      x - this.lastLabelX[lane] > s * 3.1
+    ) {
+      this.lastLabelX[lane] = x;
       ctx.globalAlpha = state === "done" ? 0.35 : 0.85;
       ctx.fillStyle = state === "current" ? c.accent : c.dim;
       ctx.font = `600 ${(s * 0.95).toFixed(1)}px -apple-system, system-ui, sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText(noteName(note.midi, this.opts.sharps), x, top + 4 * s + s * 1.5);
+      ctx.fillText(noteName(note.midi, this.opts.sharps), x, laneY);
     }
 
     ctx.globalAlpha = 1;
@@ -497,6 +598,47 @@ export class StaffView {
       ctx.fillText(clef === "treble" ? "G" : "F", 8, top + 2 * s);
     }
   }
+}
+
+/** A beam capping a run of short notes: shared stem end and direction. */
+interface Beam {
+  y: number;
+  stemUp: boolean;
+  /** 1 for eighths and triplets, 2 for sixteenths. */
+  lines: number;
+}
+
+/**
+ * Group consecutive short notes into beams, one beam per beat.
+ *
+ * Beaming per beat is what makes a bar of sixteenths or triplets readable: a
+ * page of individual flags at phone size is a hedge, not notation. A group ends
+ * at a beat boundary, at a rest (a gap between offset and the next onset), at a
+ * long note, or at a chord — chords keep their flags, which sidesteps having to
+ * pick one stem for several heads.
+ */
+function beamGroups(notes: StaffNote[]): StaffNote[][] {
+  const groups: StaffNote[][] = [];
+  let current: StaffNote[] = [];
+  const flush = (): void => {
+    if (current.length > 1) groups.push(current);
+    current = [];
+  };
+  for (const note of notes) {
+    if (note.offset - note.onset > 0.75) {
+      flush();
+      continue;
+    }
+    const prev = current[current.length - 1];
+    if (prev) {
+      const contiguous = Math.abs(prev.offset - note.onset) < 1e-6;
+      const sameBeat = Math.floor(prev.onset + 1e-6) === Math.floor(note.onset + 1e-6);
+      if (!contiguous || !sameBeat) flush();
+    }
+    current.push(note);
+  }
+  flush();
+  return groups;
 }
 
 /** Cache of glyph-availability probes (the probe rasterises, so run it once). */
