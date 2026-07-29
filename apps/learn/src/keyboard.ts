@@ -10,7 +10,7 @@
  * note name can be printed on every key while a beginner is still learning
  * where DO is.
  */
-import { noteName } from "./staff.js";
+import { noteName, octaveOf } from "./staff.js";
 
 /** Pitch classes that are white keys. */
 const WHITE_PCS = [0, 2, 4, 5, 7, 9, 11];
@@ -140,10 +140,15 @@ export class KeyboardView {
       el.className = "key white";
       el.dataset.midi = String(midi);
       el.dataset.index = String(i);
-      el.setAttribute("aria-label", noteName(midi, this.sharps));
+      el.setAttribute("aria-label", `${noteName(midi, this.sharps)}${octaveOf(midi)}`);
+      // Name plus octave: over two octaves there are several DOs on screen, and
+      // "which DO" is exactly the question a beginner is asking.
       const label = document.createElement("span");
       label.className = "kb-name";
-      label.textContent = noteName(midi, this.sharps);
+      label.append(document.createTextNode(noteName(midi, this.sharps)));
+      const octave = document.createElement("sub");
+      octave.textContent = String(octaveOf(midi));
+      label.append(octave);
       el.append(label);
       this.inner.append(el);
       this.keys.set(midi, el);

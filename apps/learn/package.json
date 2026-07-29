@@ -8,7 +8,8 @@
   "scripts": {
     "build": "node build.mjs",
     "dev": "node build.mjs --serve",
-    "share": "node serve.mjs"
+    "share": "node serve.mjs",
+    "test": "node --test --import tsx test/*.test.ts"
   },
   "dependencies": {
     "@arpeggio/musicxml-parser": "0.1.0",
@@ -19,6 +20,8 @@
   },
   "devDependencies": {
     "esbuild": "^0.24.0",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "tsx": "^4.19.2",
+    "@types/node": "^20.17.0"
   }
 }

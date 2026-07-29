@@ -1,4 +1,4 @@
-# Animation design — matching (and beating) Simply Piano
+# Animation and progression design — matching (and beating) Simply Piano
 
 What makes Simply Piano feel alive is not one big effect; it is a handful of
 small, *musically motivated* ones that all agree with each other. This document
@@ -36,7 +36,39 @@ the ordered plan for the rest.
 | Musical count-in (3·2·1 at the piece's tempo, with a click) | `main.ts` + `synth.ts` | Establishes the pulse before the first note — the single most useful "animation" for a beginner. |
 | Streak counter with a pop | `main.ts` + CSS | Appears at 3 in a row; resets on a wrong note. |
 | Stars landing one by one, confetti at 3 stars | `effects.ts` + CSS | Reward at the end of the run, off the hot path. |
+| XP bar filling, level badge, achievement toasts | `gamification.ts` + `main.ts` | Progression the learner can see between sessions, not just within one. |
 | Beamed short notes | `staff.ts` | Not an animation, but it is what makes a scrolling bar of sixteenths readable at all. |
+
+## Progression: levels, XP and achievements
+
+The reward loop lives in `apps/learn/src/gamification.ts` and is deliberately
+**pure** — `Stats` in, numbers and unlocked ids out. No DOM, no storage, no
+clock. That is what lets the whole thing be unit-tested (20 tests) and retuned
+without any risk to the practice loop.
+
+**XP rewards playing, not winning.** A run pays 1 XP per correct note, +25 for
+reaching the end, +15 per star and +10 for a run with no wrong notes. The notes
+dominate on purpose: what deserves reinforcement in the first weeks is finishing
+a piece, not finishing it cleanly. A demo listen-through pays nothing, because
+the app played it.
+
+**Levels are linear, not exponential** (`100 + (n-1)·60` XP each). An
+exponential curve makes the number meaningless by level four for someone
+practising ten minutes a day. Bands carry a title — Principiante, Aprendiz,
+Intérprete, Músico, Maestro.
+
+**Achievements are computed, never stored.** Unlocks are derived by diffing two
+`Stats` snapshots (`newlyUnlocked(before, after)`), so adding an achievement or
+retuning a goal awards it correctly on the next run instead of leaving a stale
+list behind. Seventeen of them, covering volume (100 / 1.000 / 10.000 notes),
+breadth (1 / 5 / 10 / all pieces), quality (a clean run, five clean runs),
+nerve (20- and 50-note streaks), range (both hands, a real piano through the
+microphone, three classical pieces) and consistency (3 and 7 distinct days).
+
+Presentation, all animated: the level badge and XP bar on the library header, a
+staggered slide-in toast per unlock (which can fire mid-piece), the XP bar
+filling from zero on the result sheet, and a "next achievement" hint that always
+names the closest one so the goal is never abstract.
 
 ## Next, in priority order
 

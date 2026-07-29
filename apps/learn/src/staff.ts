@@ -88,6 +88,14 @@ export function spell(midi: number, sharps: number): Spelling {
   return { letter, alter, d: octave * 7 + LETTER_STEP[letter] };
 }
 
+/**
+ * Scientific octave number, where middle C (MIDI 60) is octave 4. Shown next to
+ * a note name so "DO" is unambiguous once a piece spans more than one octave.
+ */
+export function octaveOf(midi: number): number {
+  return Math.floor(midi / 12) - 1;
+}
+
 /** Spanish note name for a MIDI pitch, e.g. 61 -> "DO♯". */
 export function noteName(midi: number, sharps: number): string {
   const { letter, alter } = spell(midi, sharps);
@@ -617,7 +625,7 @@ interface Beam {
  * long note, or at a chord — chords keep their flags, which sidesteps having to
  * pick one stem for several heads.
  */
-function beamGroups(notes: StaffNote[]): StaffNote[][] {
+export function beamGroups(notes: StaffNote[]): StaffNote[][] {
   const groups: StaffNote[][] = [];
   let current: StaffNote[] = [];
   const flush = (): void => {

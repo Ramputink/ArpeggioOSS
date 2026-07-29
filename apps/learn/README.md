@@ -78,9 +78,29 @@ song-library ──(Score)──► main.ts ──► StaffView   (canvas notati
   and keyboard are driven from one progress callback in all three cases.
 - `synth.ts` is a three-partial Web Audio voice — enough to hear pitch.
 - `effects.ts` holds the rewards: a particle pool that renders inside the staff
-  canvas, and DOM confetti for the result sheet. See
-  [`docs/ANIMATIONS.md`](../../docs/ANIMATIONS.md) for the full animation design
-  and what is planned next (waterfall mode, hand colouring, section loops).
+  canvas, and DOM confetti for the result sheet.
+- `gamification.ts` is levels, XP and the seventeen achievements — pure
+  functions over a `Stats` object, so it is fully unit-tested and can be retuned
+  without touching the practice loop.
+- `icons.ts` is the icon set as inline SVG. No emoji anywhere in the UI: emoji
+  render differently on every platform, cannot follow the theme, and read as a
+  placeholder rather than as a product.
+
+See [`docs/ANIMATIONS.md`](../../docs/ANIMATIONS.md) for the animation and
+progression design, and for what is planned next (waterfall mode, hand
+colouring, section loops).
+
+## Tests
+
+```bash
+npm test -w @arpeggio/learn
+```
+
+Twenty tests over the parts that are pure and worth pinning down: the XP curve
+and level thresholds, achievement progress and unlock diffing, note spelling on
+the staff (an accidental must sit on its natural letter's line), and beam
+grouping (one beam per beat, broken by rests, long notes and chords). The canvas
+and audio layers are verified in the browser instead.
 
 TensorFlow.js (1.9 MB) is behind a dynamic import: it is fetched only when you
 start a microphone session on a piece that actually has chords.

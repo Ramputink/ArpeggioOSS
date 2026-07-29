@@ -5,9 +5,8 @@
   <!-- viewport-fit=cover + safe-area insets keep the keyboard clear of the
        iPhone home indicator when the PWA runs full screen. -->
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-  <meta name="theme-color" content="#0b0e14" media="(prefers-color-scheme: dark)" />
-  <meta name="theme-color" content="#f6f7fc" media="(prefers-color-scheme: light)" />
-  <meta name="description" content="Aprende piano desde cero con partituras animadas." />
+  <meta name="theme-color" content="#0a0d12" />
+  <meta name="description" content="Aprende piano desde cero con partituras animadas: de tres dedos en DO a Bach y Beethoven." />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Arpeggio" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -20,101 +19,210 @@
 <body>
 
 <!-- ===================== Library ===================== -->
-<section id="library" class="screen">
-  <header class="lib-head">
+<main id="library" class="screen">
+  <header class="topbar">
     <div class="brand">
-      <span class="glyph">🎹</span>
-      <div>
-        <h1>Arpeggio</h1>
-        <p class="sub">Aprende piano desde cero</p>
-      </div>
+      <span id="brandMark" class="brand-mark"></span>
+      <span class="brand-text">
+        <span class="brand-name">Arpeggio</span>
+        <span class="brand-sub">Piano desde cero</span>
+      </span>
     </div>
-    <button id="themeBtn" class="ghost round" aria-label="Cambiar tema">◐</button>
+    <div class="topbar-actions">
+      <button id="themeBtn" class="iconbtn" aria-label="Cambiar entre tema claro y oscuro"></button>
+      <button id="settingsBtn" class="iconbtn" aria-label="Ajustes"></button>
+    </div>
   </header>
 
-  <div id="hero" class="hero hidden"></div>
+  <!-- First run only: what this app expects of you. -->
+  <section id="intro" class="panel hidden" aria-labelledby="introTitle">
+    <h2 id="introTitle">Cómo funciona</h2>
+    <ul class="howto">
+      <li>
+        <span class="howto-icon" data-icon="keys"></span>
+        <span><b>No necesitas piano</b>Toca el teclado de la pantalla y suena de verdad.</span>
+      </li>
+      <li>
+        <span class="howto-icon" data-icon="note"></span>
+        <span><b>La partitura te espera</b>Avanza cuando aciertas; si dudas, se queda quieta.</span>
+      </li>
+      <li>
+        <span class="howto-icon" data-icon="mic"></span>
+        <span><b>¿Ya tienes piano?</b>Elige «Mi piano» y te escucha por el micrófono.</span>
+      </li>
+    </ul>
+    <button id="introDone" class="btn btn-primary">Empezar</button>
+  </section>
 
-  <div id="songList" class="list"></div>
+  <!-- Level, experience and achievements at a glance. -->
+  <button id="profile" class="profile" type="button" aria-label="Ver tus logros">
+    <span class="profile-badge"><b id="profileLevel" class="num">1</b><small>nivel</small></span>
+    <span class="profile-body">
+      <span class="profile-top">
+        <b id="profileTitle">Principiante</b>
+        <span id="profileXp" class="micro num"></span>
+      </span>
+      <span class="xpbar"><i id="profileBar"></i></span>
+      <span id="profileMeta" class="micro"></span>
+    </span>
+    <span id="profileChevron" class="profile-chevron" aria-hidden="true"></span>
+  </button>
 
-  <footer class="lib-foot">
-    <p>Diez piezas de dominio público, de la más fácil a la más difícil.
-       Empieza por <strong>María tenía un corderito</strong>: solo usa tres dedos.</p>
-    <p class="tiny">Arpeggio OSS · AGPL-3.0 · funciona sin conexión</p>
+  <button id="hero" class="hero hidden" type="button">
+    <span class="hero-text">
+      <span class="eyebrow">Continuar</span>
+      <strong id="heroTitle"></strong>
+      <span id="heroSub" class="muted"></span>
+    </span>
+    <span id="heroCta" class="hero-cta" aria-hidden="true"></span>
+  </button>
+
+  <div id="songList" class="levels"></div>
+
+  <footer class="footer">
+    <p id="footNote" class="muted"></p>
+    <p class="micro">
+      Arpeggio OSS · AGPL-3.0 ·
+      <a href="https://github.com/Ramputink/ArpeggioOSS" target="_blank" rel="noopener">código abierto</a>
+    </p>
   </footer>
-</section>
+</main>
 
 <!-- ===================== Play ===================== -->
-<section id="play" class="screen hidden">
-  <header class="play-head">
-    <button id="back" class="ghost round" aria-label="Volver">‹</button>
-    <div class="ptitle">
+<main id="play" class="screen hidden">
+  <header class="playbar">
+    <button id="back" class="iconbtn" aria-label="Volver a la biblioteca"></button>
+    <div class="playbar-title">
       <strong id="playTitle">—</strong>
-      <span id="playMeta" class="sub"></span>
+      <span id="playMeta" class="muted"></span>
     </div>
-    <button id="namesBtn" class="ghost round on" aria-label="Mostrar nombres de las notas">DO</button>
+    <button id="namesBtn" class="iconbtn iconbtn-text" aria-pressed="true"
+            aria-label="Mostrar u ocultar los nombres de las notas">DO</button>
   </header>
 
-  <div class="progress"><i id="progressBar"></i></div>
+  <div class="track" role="progressbar" aria-label="Progreso de la pieza"
+       aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="track">
+    <i id="progressBar"></i>
+  </div>
 
   <div class="staff-wrap">
     <canvas id="staff"></canvas>
     <div id="countdown" class="countdown hidden" aria-hidden="true"><span></span></div>
-    <div id="combo" class="combo" aria-live="polite"></div>
+    <div id="streak" class="streak" aria-live="polite">
+      <span id="streakIcon" class="streak-icon" aria-hidden="true"></span>
+      <span id="streakCount"></span>
+    </div>
   </div>
 
-  <div id="status" class="status">Preparado</div>
+  <div id="cue" class="cue" aria-live="polite"><span class="cue-text">Preparado</span></div>
 
   <div id="keyboard" class="keyboard"></div>
-</section>
+</main>
 
 <!-- ===================== Setup sheet ===================== -->
-<div id="setup" class="sheet hidden">
+<div id="setup" class="sheet hidden" role="dialog" aria-modal="true" aria-labelledby="setupTitle">
   <div class="sheet-card">
-    <div class="grabber"></div>
+    <span class="grabber" aria-hidden="true"></span>
     <h2 id="setupTitle">—</h2>
     <p id="setupTip" class="tip"></p>
 
     <div class="field">
       <span class="flabel">¿Cómo vas a tocar?</span>
-      <div class="segmented" id="modeSel">
-        <button data-mode="keys" class="on">🎹 En la pantalla</button>
-        <button data-mode="mic">🎤 Mi piano</button>
-        <button data-mode="demo">▶︎ Escuchar</button>
+      <div class="segmented" id="modeSel" role="group" aria-label="Modo de práctica">
+        <button type="button" data-mode="keys" class="on"><i data-icon="keys"></i>En la pantalla</button>
+        <button type="button" data-mode="mic"><i data-icon="mic"></i>Mi piano</button>
+        <button type="button" data-mode="demo"><i data-icon="ear"></i>Escuchar</button>
       </div>
-      <p id="modeHelp" class="hint">Toca las teclas del móvil. No necesitas piano.</p>
+      <p id="modeHelp" class="hint"></p>
     </div>
 
     <div class="field">
       <span class="flabel">Manos</span>
-      <div class="segmented" id="handSel">
-        <button data-hand="right" class="on">Derecha</button>
-        <button data-hand="left">Izquierda</button>
-        <button data-hand="both">Las dos</button>
+      <div class="segmented" id="handSel" role="group" aria-label="Manos">
+        <button type="button" data-hand="right" class="on">Derecha</button>
+        <button type="button" data-hand="left">Izquierda</button>
+        <button type="button" data-hand="both">Las dos</button>
       </div>
+      <p id="handHint" class="hint hidden">Esta pieza solo tiene melodía: se toca con la mano derecha.</p>
     </div>
 
-    <div class="field" id="tempoField">
-      <span class="flabel">Velocidad · <b id="bpmOut">90</b> ppm</span>
-      <input id="tempo" type="range" min="40" max="140" step="2" value="90" />
+    <div class="field hidden" id="tempoField">
+      <span class="flabel">Velocidad · <b id="bpmOut" class="num">90</b> ppm</span>
+      <input id="tempo" type="range" min="40" max="140" step="2" value="90"
+             aria-label="Velocidad de la reproducción en pulsos por minuto" />
     </div>
 
-    <button id="go" class="cta">Empezar</button>
-    <button id="cancel" class="ghost wide">Cancelar</button>
+    <div class="sheet-actions">
+      <button id="go" class="btn btn-primary">Empezar</button>
+      <button id="cancel" class="btn btn-quiet">Cancelar</button>
+    </div>
   </div>
 </div>
 
 <!-- ===================== Result sheet ===================== -->
-<div id="result" class="sheet hidden">
+<div id="result" class="sheet hidden" role="dialog" aria-modal="true" aria-labelledby="resultTitle">
   <div class="sheet-card center">
-    <div class="grabber"></div>
-    <div id="stars" class="stars">★★★</div>
-    <h2 id="resultTitle">¡Muy bien!</h2>
+    <span class="grabber" aria-hidden="true"></span>
+    <div id="stars" class="stars" aria-hidden="true"></div>
+    <h2 id="resultTitle">—</h2>
     <p id="resultLine" class="tip"></p>
-    <button id="again" class="cta">Otra vez</button>
-    <button id="next" class="ghost wide">Siguiente canción</button>
-    <button id="toLibrary" class="ghost wide">Volver a la biblioteca</button>
+    <dl id="resultStats" class="stats"></dl>
+
+    <div id="resultXp" class="xprow hidden">
+      <span class="xprow-head">
+        <b id="resultXpText" class="num"></b>
+        <span id="resultLevelText" class="micro num"></span>
+      </span>
+      <span class="xpbar"><i id="resultXpBar"></i></span>
+    </div>
+
+    <p id="resultAdvice" class="hint hidden"></p>
+    <div class="sheet-actions" id="resultActions"></div>
   </div>
 </div>
+
+<!-- ===================== Settings sheet ===================== -->
+<div id="settings" class="sheet hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+  <div class="sheet-card">
+    <span class="grabber" aria-hidden="true"></span>
+    <h2 id="settingsTitle">Ajustes</h2>
+
+    <label class="row">
+      <span><b>Nombres de las notas</b><small>DO, RE, MI sobre la partitura y las teclas.</small></span>
+      <input type="checkbox" id="optNames" class="switch" />
+    </label>
+    <label class="row">
+      <span><b>Cuenta atrás</b><small>Tres pulsos al tempo de la pieza antes de empezar.</small></span>
+      <input type="checkbox" id="optCountIn" class="switch" />
+    </label>
+    <label class="row">
+      <span><b>Vibración</b><small>Un toque corto al acertar o fallar una tecla.</small></span>
+      <input type="checkbox" id="optHaptics" class="switch" />
+    </label>
+
+    <p class="micro" id="aboutLine"></p>
+    <button id="resetProgress" class="btn btn-quiet danger">Borrar mi progreso</button>
+    <div class="sheet-actions">
+      <button id="settingsDone" class="btn btn-primary">Listo</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== Achievements sheet ===================== -->
+<div id="achievements" class="sheet hidden" role="dialog" aria-modal="true" aria-labelledby="achTitle">
+  <div class="sheet-card">
+    <span class="grabber" aria-hidden="true"></span>
+    <h2 id="achTitle">Logros</h2>
+    <p id="achHeadline" class="tip"></p>
+    <div id="achList" class="achlist"></div>
+    <div class="sheet-actions">
+      <button id="achDone" class="btn btn-primary">Listo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Unlock notifications; can appear mid-piece. -->
+<div id="toasts" class="toasts" aria-live="polite"></div>
 
 <script type="module" src="./app.js"></script>
 </body>

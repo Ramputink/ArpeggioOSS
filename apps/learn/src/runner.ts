@@ -76,6 +76,13 @@ export class Runner {
 
   private correct = 0;
   private wrong = 0;
+  /**
+   * Measure the learner is currently on. In microphone mode the judging happens
+   * inside LivePractice's own follower, so this one never advances — without
+   * tracking it here every event would be filed under measure 1 and the
+   * "practise these bars" advice would be useless.
+   */
+  private measure = 1;
 
   constructor(score: Score, opts: RunnerOptions) {
     this.score = score;
@@ -201,6 +208,7 @@ export class Runner {
   }
 
   private syncFromLive(index: number, positionBeats: number, measure: number, done: boolean): void {
+    this.measure = measure;
     const group = this.groupAt(index);
     this.opts.hooks.onProgress({
       doneIndex: index,
@@ -226,11 +234,16 @@ export class Runner {
     return this.groups[gi] ?? [];
   }
 
+  /** Measures the student model rates as the hardest so far, hardest first. */
+  weakestMeasures(limit = 3): number[] {
+    return this.student.recommendPractice(limit);
+  }
+
   private handleEvents(events: PlayerEvent[]): void {
     for (const ev of events) {
       if (ev.kind === "correct") this.correct++;
       else if (ev.kind === "wrong") this.wrong++;
-      this.student.record(ev, this.follower.state.measure);
+      this.student.record(ev, this.measure);
       this.opts.hooks.onJudge(ev);
     }
     if (this.opts.mode === "keys") {
@@ -241,6 +254,7 @@ export class Runner {
 
   private emitProgress(): void {
     const state = this.follower.state;
+    this.measure = state.measure;
     this.opts.hooks.onProgress({
       doneIndex: state.index,
       total: this.notes.length,
