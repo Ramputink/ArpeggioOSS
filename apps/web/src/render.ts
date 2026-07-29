@@ -3,7 +3,7 @@
  * "active note" highlight driven by the score follower during practice.
  */
 import type { Score, NoteEvent } from "@arpeggio/musicxml-parser";
-import type { ScoreRenderer } from "./contracts.js";
+import type { ScoreRenderer } from "@arpeggio/practice-web";
 
 type Hand = "both" | "right" | "left";
 

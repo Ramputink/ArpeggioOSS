@@ -1,0 +1,26 @@
+{
+  "name": "@arpeggio/practice-web",
+  "version": "0.1.0",
+  "description": "Browser glue shared by the Arpeggio web apps: microphone/simulated audio frame sources and the LivePractice pump that drives a PracticeSession from them.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@arpeggio/musicxml-parser": "0.1.0",
+    "@arpeggio/practice-engine": "0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

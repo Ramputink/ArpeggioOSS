@@ -14,9 +14,8 @@ import type { DetectedNote } from "@arpeggio/practice-engine";
 
 import { backendBase, health, needsOmr, omrToMusicXML } from "./api.js";
 import { PianoRoll } from "./render.js";
-import { MicSource, SimSource, ChordSource } from "./audio.js";
-import { LivePractice } from "./practice.js";
-import type { FrameSource, PlayerEvent } from "./contracts.js";
+import { LivePractice, MicSource, SimSource, ChordSource } from "@arpeggio/practice-web";
+import type { FrameSource, PlayerEvent } from "@arpeggio/practice-web";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);

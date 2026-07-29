@@ -9,7 +9,10 @@
     "packages/omr-client",
     "packages/practice-engine",
     "packages/motor2-basicpitch",
-    "apps/web"
+    "packages/practice-web",
+    "packages/song-library",
+    "apps/web",
+    "apps/learn"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
