@@ -9,7 +9,18 @@
 import { strict as assert } from "node:assert";
 import test from "node:test";
 
-import { beamGroups, noteName, octaveOf, spell, type StaffNote } from "../src/staff.js";
+import { MIN_KEY_WIDTH, whiteKeysNeeded } from "../src/keyboard.js";
+import {
+  beamGroups,
+  noteName,
+  octaveOf,
+  shortestGap,
+  spell,
+  type StaffNote,
+} from "../src/staff.js";
+
+/** CSS width of the reference device, an iPhone 15 Pro in portrait. */
+const IPHONE_15_PRO_WIDTH = 393;
 
 /** Build a note run from `[midi, onset, duration]` triples. */
 function notes(...spec: Array<[number, number, number]>): StaffNote[] {
@@ -72,6 +83,39 @@ test("long notes, rests and lone short notes never form a beam", () => {
   assert.deepEqual(beamGroups(notes([60, 0, 0.25], [62, 0.5, 0.25])), []);
   // A single eighth on its own keeps its flag.
   assert.deepEqual(beamGroups(notes([60, 0, 0.5])), []);
+});
+
+test("the horizontal scale follows the shortest note in the piece", () => {
+  assert.equal(shortestGap(notes([60, 0, 1], [62, 1, 1], [64, 2, 1])), 1);
+  assert.equal(shortestGap(notes([60, 0, 1], [62, 1, 0.5], [64, 1.5, 0.5])), 0.5);
+  // Chords share a slot, so a simultaneous note must not count as zero spacing.
+  assert.equal(shortestGap(notes([60, 0, 2], [64, 0, 2], [67, 2, 2])), 1);
+  // A piece of whole notes must not spread itself across three screens…
+  assert.equal(shortestGap(notes([60, 0, 4], [62, 4, 4])), 1);
+  // …and a 32nd must not shrink the layout past the floor.
+  assert.equal(shortestGap(notes([60, 0, 0.05], [62, 0.05, 0.05])), 0.125);
+  assert.equal(shortestGap([]), 1);
+});
+
+test("a beginner's key range fits an iPhone 15 Pro without scrolling", () => {
+  const fits = (lo: number, hi: number): boolean =>
+    whiteKeysNeeded(lo, hi) * MIN_KEY_WIDTH <= IPHONE_15_PRO_WIDTH;
+  // Level 1 lives in the five-finger position: one octave of keys, no scrolling.
+  assert.ok(fits(60, 67), "C4–G4 must fit");
+  assert.ok(fits(60, 71), "a full octave must fit");
+  // Für Elise spans three and a half octaves and genuinely cannot fit — that is
+  // the case the setup sheet warns about rather than pretending otherwise.
+  assert.ok(!fits(45, 76), "A2–E5 must not claim to fit");
+  // At least twelve white keys are visible, which is what makes a two-hand piece
+  // usable at all on this screen.
+  assert.ok(Math.floor(IPHONE_15_PRO_WIDTH / MIN_KEY_WIDTH) >= 12);
+});
+
+test("the key range is padded out to whole octaves", () => {
+  // A single note still yields a full octave, so the keyboard always starts on a C.
+  assert.equal(whiteKeysNeeded(64, 64), 7);
+  assert.equal(whiteKeysNeeded(60, 71), 7);
+  assert.equal(whiteKeysNeeded(60, 72), 14);
 });
 
 test("every beamed note appears in exactly one group", () => {

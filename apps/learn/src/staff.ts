@@ -139,6 +139,11 @@ export class StaffView {
   private hitPoints: Array<{ x: number; y: number }> = [];
   /** X of the last note name printed on each staff, to stop labels colliding. */
   private lastLabelX: number[] = [];
+  /**
+   * Shortest gap between consecutive onsets in the piece, in beats. Drives the
+   * horizontal scale, so it is computed once per piece rather than per frame.
+   */
+  private minGap = 1;
   private palette: Palette = {
     bg: "#0b0e14", line: "#39445a", ink: "#e8ecf3", dim: "#7f8aa0",
     accent: "#f2b441", ok: "#33d6c0", bad: "#ff6b6b",
@@ -156,6 +161,7 @@ export class StaffView {
   setPiece(notes: StaffNote[], opts: StaffOptions): void {
     this.notes = [...notes].sort((a, b) => a.onset - b.onset || a.midi - b.midi);
     this.opts = opts;
+    this.minGap = shortestGap(this.notes);
     this.doneIndex = 0;
     // Start with the first note already at the playhead rather than sliding in.
     this.beatTarget = this.beatNow = notes.length ? notes[0].onset : 0;
@@ -272,11 +278,33 @@ export class StaffView {
       ? [blockTop + ABOVE * s, blockTop + (ABOVE + 9) * s]
       : [blockTop + ABOVE * s];
 
-    const gutter = Math.round(4.6 * s) + 14;
+    // --- fixed gutter: clef + key signature ---
+    // Sized from its contents rather than from a constant. A constant wide
+    // enough for four sharps wastes a third of a 393 px phone screen on a piece
+    // in C major; and when four sharps really are needed, the accidentals are
+    // squeezed rather than allowed to push the music off the screen.
+    const accidentals = Math.min(Math.abs(this.opts.sharps), 7);
+    const keyX = 8 + 2.5 * s;
+    let accStep = 0.85 * s;
+    let gutter = keyX + accidentals * accStep + (accidentals > 0 ? 10 : 8);
+    const maxGutter = w * 0.34;
+    if (accidentals > 0 && gutter > maxGutter) {
+      accStep = Math.max(0.52 * s, (maxGutter - keyX - 10) / accidentals);
+      gutter = keyX + accidentals * accStep + 10;
+    }
+
     // Keep a little of what was just played visible to the left of the
     // playhead; on a narrow phone that collapses to just past the clef.
     const playX = Math.max(gutter + 1.6 * s + 10, Math.min(w * 0.28, 260));
-    const pxPerBeat = clamp(w / 7.5, 44, 130);
+
+    // Horizontal scale comes from the SHORTEST note in the piece, so its head
+    // always has room. Fixing pixels-per-beat instead would overlap the heads of
+    // a sixteenth-note passage on a phone; this makes dense music scroll faster
+    // rather than become illegible, and leaves quarter-note pieces spacious.
+    // 1.65 staff spaces per shortest note: a head is 1.32 wide, so that leaves a
+    // small gap. Tighter and the heads touch; looser and a phone shows less than
+    // one beat of music ahead.
+    const pxPerBeat = clamp((1.65 * s) / this.minGap, 46, 200);
 
     const toX = (beat: number): number => playX + (beat - this.beatNow) * pxPerBeat;
     const firstBeat = this.beatNow - (playX - gutter) / pxPerBeat;
@@ -391,7 +419,7 @@ export class StaffView {
     }
     staffTops.forEach((top, i) => {
       this.drawClef(this.opts.clefs[i], top, s);
-      this.drawKeySignature(this.opts.clefs[i], top, s, Math.round(3.1 * s) + 6);
+      this.drawKeySignature(this.opts.clefs[i], top, s, keyX, accStep);
     });
 
     // --- playhead ---
@@ -566,7 +594,13 @@ export class StaffView {
     return sp.alter === 1 ? "♯" : "♭";
   }
 
-  private drawKeySignature(clef: Clef, top: number, s: number, x0: number): void {
+  private drawKeySignature(
+    clef: Clef,
+    top: number,
+    s: number,
+    x0: number,
+    step: number,
+  ): void {
     const { ctx, palette: c } = this;
     const { sharps } = this.opts;
     if (sharps === 0) return;
@@ -574,12 +608,15 @@ export class StaffView {
     const glyph = sharps > 0 ? "♯" : "♭";
     const count = Math.min(Math.abs(sharps), 7);
     ctx.fillStyle = c.ink;
-    ctx.font = `${(s * 2.3).toFixed(1)}px "Apple Symbols", "Segoe UI Symbol", serif`;
+    // Scale the glyph with the (possibly squeezed) spacing so a four-sharp key
+    // signature on a narrow screen stays legible instead of overlapping itself.
+    const size = Math.min(s * 2.3, step * 2.6);
+    ctx.font = `${size.toFixed(1)}px "Apple Symbols", "Segoe UI Symbol", serif`;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     for (let i = 0; i < count; i++) {
       const y = top + 4 * s - (slots[i] - BOTTOM_LINE[clef]) * (s / 2);
-      ctx.fillText(glyph, x0 + i * s * 0.85, y);
+      ctx.fillText(glyph, x0 + i * step, y);
     }
   }
 
@@ -606,6 +643,23 @@ export class StaffView {
       ctx.fillText(clef === "treble" ? "G" : "F", 8, top + 2 * s);
     }
   }
+}
+
+/**
+ * Shortest distance between two consecutive onsets, in beats — the tightest
+ * spacing the layout has to accommodate.
+ *
+ * Simultaneous notes (chords) are skipped, since they share one horizontal slot.
+ * The floor of an eighth keeps a piece written entirely in whole notes from
+ * spreading itself across three screens.
+ */
+export function shortestGap(notes: StaffNote[]): number {
+  let min = Infinity;
+  for (let i = 1; i < notes.length; i++) {
+    const gap = notes[i].onset - notes[i - 1].onset;
+    if (gap > 1e-6 && gap < min) min = gap;
+  }
+  return Number.isFinite(min) ? Math.max(0.125, Math.min(min, 1)) : 1;
 }
 
 /** A beam capping a run of short notes: shared stem end and direction. */

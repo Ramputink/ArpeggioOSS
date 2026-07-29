@@ -15,6 +15,29 @@ import { noteName, octaveOf } from "./staff.js";
 /** Pitch classes that are white keys. */
 const WHITE_PCS = [0, 2, 4, 5, 7, 9, 11];
 
+/**
+ * Narrowest a white key may get before the keyboard scrolls instead of shrinking.
+ *
+ * 32, not the 44 px Apple recommends for discrete controls: a piano key is 150 px
+ * tall and immediately adjacent to its neighbours, so it is aimed at with a
+ * fingertip much like a letter on the iOS keyboard (whose keys are about 36 px
+ * wide on this screen). The number is a trade: at 32 px an iPhone 15 Pro shows
+ * twelve white keys at once instead of nine, which is the difference between
+ * seeing both hands' next keys and not. Two full octaves still need 448 px, so
+ * wide pieces scroll — `reveal()` centres the notes that are actually due, and
+ * the setup sheet warns when even that cannot fit.
+ */
+export const MIN_KEY_WIDTH = 32;
+
+/** White keys spanned by a pitch range, padded out to whole octaves. */
+export function whiteKeysNeeded(lowest: number, highest: number): number {
+  const lo = Math.floor(lowest / 12) * 12;
+  const hi = Math.ceil((highest + 1) / 12) * 12 - 1;
+  let count = 0;
+  for (let m = lo; m <= hi; m++) if (WHITE_PCS.includes(m % 12)) count++;
+  return count;
+}
+
 export interface KeyboardOptions {
   onPress(midi: number): void;
   onRelease(midi: number): void;
@@ -70,8 +93,10 @@ export class KeyboardView {
   /** Glow the key(s) the score is waiting for and keep them on screen. */
   setHighlight(midis: number[]): void {
     for (const [midi, el] of this.keys) el.classList.toggle("next", midis.includes(midi));
-    const first = midis.length ? this.keys.get(Math.min(...midis)) : undefined;
-    if (first) this.scrollIntoView(first, midis.length);
+    if (midis.length === 0) return;
+    const lo = this.keys.get(Math.min(...midis));
+    const hi = this.keys.get(Math.max(...midis));
+    if (lo && hi) this.reveal(lo, hi);
   }
 
   /** Brief feedback on a played key: teal for a match, rose for a wrong note. */
@@ -190,8 +215,7 @@ export class KeyboardView {
     // A hidden play screen measures 0 wide, which would freeze every key at the
     // minimum width even on a desktop. Wait to be measured for real instead.
     if (available === 0) return;
-    const MIN_KEY = 44;
-    const keyW = Math.max(MIN_KEY, available / whiteCount);
+    const keyW = Math.max(MIN_KEY_WIDTH, available / whiteCount);
     const blackW = keyW * 0.62;
     this.inner.style.width = `${keyW * whiteCount}px`;
     for (const el of this.keys.values()) {
@@ -206,15 +230,33 @@ export class KeyboardView {
     }
   }
 
-  /** Keep the highlighted key comfortably inside the scroll window. */
-  private scrollIntoView(el: HTMLElement, span: number): void {
-    const left = el.offsetLeft;
-    const width = el.offsetWidth * Math.max(1, span);
+  /**
+   * Bring the whole expected span into view.
+   *
+   * When both hands are due at once the two keys can be two octaves apart, so
+   * the span is CENTRED whenever it fits — aligning the lowest key to the left
+   * margin would leave the right hand's key off screen on a phone. When the span
+   * is wider than the keyboard window, the lowest key wins: the left hand is
+   * what needs finding, and the melody is the hand a learner can feel out.
+   */
+  private reveal(lo: HTMLElement, hi: HTMLElement): void {
     const view = this.scroller.clientWidth;
-    const margin = Math.min(80, view * 0.25);
+    const start = lo.offsetLeft;
+    const end = hi.offsetLeft + hi.offsetWidth;
+    const margin = Math.min(72, view * 0.22);
+
     let target = this.scroller.scrollLeft;
-    if (left < target + margin) target = left - margin;
-    else if (left + width > target + view - margin) target = left + width - view + margin;
+    // Centre whenever the span fits at all — a two-hand span is often only a few
+    // pixels narrower than the window, and requiring a comfort margin on both
+    // sides would reject it and push one hand's key off screen.
+    if (end - start <= view - 4) {
+      target = start - (view - (end - start)) / 2;
+    } else if (start < target + margin) {
+      target = start - margin;
+    } else if (start > target + view - margin) {
+      target = start - margin;
+    }
+
     target = Math.max(0, Math.min(target, this.inner.offsetWidth - view));
     if (Math.abs(target - this.scroller.scrollLeft) > 2) {
       this.scroller.scrollTo({ left: target, behavior: "smooth" });

@@ -51,6 +51,18 @@
   --shadow-sheet: 0 -18px 50px -20px rgba(0, 0, 0, 0.75);
 
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /*
+   * Safe areas go through variables rather than being read from env() at every
+   * use site. Two reasons: the fallbacks stay in one place, and a layout can be
+   * checked at a specific device's insets by overriding these four values
+   * (iPhone 15 Pro standalone portrait is 59px top / 34px bottom on a
+   * 393 × 852 viewport).
+   */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
 }
 
 :root[data-theme="light"] {
@@ -88,6 +100,12 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+html {
+  /* Stop iOS inflating text in landscape, which would break the fixed layout. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 html, body { margin: 0; height: 100%; overscroll-behavior: none; }
 
 body {
@@ -115,7 +133,12 @@ a { color: var(--muted); text-decoration-color: var(--line-strong); }
 svg { display: block; }
 
 /* ----------------------------------------------------------------- buttons */
-button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; padding: 0; }
+button {
+  font: inherit; color: inherit; border: 0; background: none; cursor: pointer; padding: 0;
+  /* iOS ignores user-scalable=no, so kill double-tap zoom (and its 300 ms tap
+     delay) per control instead. */
+  touch-action: manipulation;
+}
 
 .btn {
   display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -135,7 +158,9 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 
 .iconbtn {
   display: grid; place-items: center;
-  width: 40px; height: 40px; border-radius: var(--r-pill);
+  /* 44px is Apple's minimum comfortable target, and these sit at the very top
+     of the screen where the thumb is least accurate. */
+  width: 44px; height: 44px; border-radius: var(--r-pill);
   background: var(--surface-2); border: 1px solid var(--line); color: var(--fg);
   transition: background 0.15s linear, color 0.15s linear;
 }
@@ -148,7 +173,7 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 
 #library {
   max-width: 680px; margin: 0 auto;
-  padding: max(14px, env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom));
+  padding: max(12px, var(--safe-top)) calc(16px + var(--safe-right)) calc(28px + var(--safe-bottom)) calc(16px + var(--safe-left));
 }
 
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0 20px; }
@@ -197,6 +222,9 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .profile-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .profile-top b { font-size: 15px; font-weight: 650; }
 .profile-chevron { flex: 0 0 auto; color: var(--faint); }
+/* The "next achievement" hint is variable-length; truncate rather than let it
+   wrap and change the height of the card. */
+.profile-body > .micro { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .xpbar { display: block; height: 6px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
 .xpbar i { display: block; height: 100%; width: 0; border-radius: 4px; background: var(--accent); transition: width 0.7s var(--ease); }
@@ -230,7 +258,7 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 /* achievement toasts */
 .toasts {
   position: fixed; z-index: 40; left: 0; right: 0;
-  top: calc(env(safe-area-inset-top) + 10px);
+  top: calc(var(--safe-top) + 10px);
   display: flex; flex-direction: column; align-items: center; gap: 8px;
   pointer-events: none; padding: 0 14px;
 }
@@ -311,7 +339,12 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
   font-size: 15px; font-weight: 600; letter-spacing: -0.005em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.card-meta { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* One line, always: a wrapping meta line makes one row taller than its
+   neighbours, which reads as a layout bug on a narrow screen. */
+.card-meta {
+  font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .card-stars { flex: 0 0 auto; display: flex; gap: 2px; color: var(--accent); }
 .card-stars .off { color: var(--line-strong); }
 .card-chevron { flex: 0 0 auto; color: var(--faint); }
@@ -323,10 +356,15 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 #play {
   display: flex; flex-direction: column;
   height: 100dvh; min-height: 0;
-  padding-top: env(safe-area-inset-top);
+  padding-top: var(--safe-top);
   background: var(--bg);
 }
-.playbar { display: flex; align-items: center; gap: 12px; padding: 8px 12px; flex: 0 0 auto; }
+.playbar {
+  display: flex; align-items: center; gap: 12px; flex: 0 0 auto;
+  /* Side insets matter in landscape, where the Dynamic Island eats 59px of the
+     left edge and the controls would otherwise sit underneath it. */
+  padding: 7px calc(12px + var(--safe-right)) 7px calc(12px + var(--safe-left));
+}
 .playbar-title { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
 .playbar-title strong { font-size: 15.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .playbar-title .muted { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -383,12 +421,22 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .chip sub { font-size: 10px; font-weight: 700; opacity: 0.75; }
 
 /* ---------------------------------------------------------------- keyboard */
-.keyboard { flex: 0 0 auto; padding-bottom: env(safe-area-inset-bottom); background: var(--bg-2); }
+.keyboard {
+  flex: 0 0 auto; background: var(--bg-2);
+  padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left);
+}
 .kb-scroll { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
 .kb-scroll::-webkit-scrollbar { display: none; }
-.kb-inner { position: relative; height: 172px; touch-action: none; border-top: 1px solid var(--line); }
-@media (max-height: 720px) { .kb-inner { height: 146px; } }
-@media (max-height: 620px) { .kb-inner { height: 122px; } }
+/*
+ * Key height ladder. The reference device is an iPhone 15 Pro: 852 dvh in
+ * standalone, of which 59 + 34 go to the insets — so the keys have to leave the
+ * staff a readable share of what is left. The taller breakpoints exist for
+ * larger phones and for desktop.
+ */
+.kb-inner { position: relative; height: 168px; touch-action: none; border-top: 1px solid var(--line); }
+@media (max-height: 880px) { .kb-inner { height: 152px; } }
+@media (max-height: 740px) { .kb-inner { height: 134px; } }
+@media (max-height: 660px) { .kb-inner { height: 118px; } }
 
 .key { position: absolute; top: 0; padding: 0; }
 .key.white {
@@ -419,12 +467,12 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 @keyframes keyhit { 0% { background: var(--ok); box-shadow: 0 0 22px -2px var(--ok); } 100% {} }
 @keyframes keymiss { 0% { background: var(--bad); box-shadow: 0 0 22px -2px var(--bad); } 100% {} }
 
-/* Landscape on a phone: give the staff the height the chrome was using. */
+/* Landscape on a phone: give the staff back the height the chrome was using. */
 @media (orientation: landscape) and (max-height: 520px) {
-  .playbar { padding: 4px 10px; }
+  .playbar { padding: 3px calc(10px + var(--safe-right)) 3px calc(10px + var(--safe-left)); }
   .playbar-title .muted { display: none; }
-  .cue { min-height: 38px; }
-  .kb-inner { height: 108px; }
+  .cue { min-height: 36px; }
+  .kb-inner { height: 104px; }
 }
 
 /* ------------------------------------------------------------------ sheets */
@@ -441,7 +489,7 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
   width: 100%; max-width: 560px; max-height: 92dvh;
   background: var(--surface); border-radius: 26px 26px 0 0;
   border-top: 1px solid var(--line);
-  padding: 8px 20px calc(20px + env(safe-area-inset-bottom));
+  padding: 8px 20px calc(20px + var(--safe-bottom));
   box-shadow: var(--shadow-sheet);
   animation: rise 0.28s var(--ease);
 }
@@ -458,6 +506,7 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
   color: var(--faint); font-weight: 700; margin-bottom: 8px;
 }
 .hint { color: var(--muted); font-size: 12.5px; margin: 8px 2px 0; }
+.hint.warn { color: var(--accent); }
 
 .segmented { display: flex; gap: 4px; background: var(--surface-2); padding: 4px; border-radius: var(--r-md); }
 .segmented button {

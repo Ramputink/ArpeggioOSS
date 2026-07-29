@@ -9,7 +9,11 @@
   <meta name="description" content="Aprende piano desde cero con partituras animadas: de tres dedos en DO a Bach y Beethoven." />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Arpeggio" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <!-- Not "black-translucent": that keeps the status-bar text permanently white,
+       which is invisible over the light theme. Letting iOS draw the bar from
+       `theme-color` is readable in both themes, and viewport-fit=cover still
+       gives us the home-indicator and landscape side insets. -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="icon" href="./icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="./icon-180.png" />
@@ -124,6 +128,7 @@
   <div class="sheet-card">
     <span class="grabber" aria-hidden="true"></span>
     <h2 id="setupTitle">—</h2>
+    <p id="setupMeta" class="micro num"></p>
     <p id="setupTip" class="tip"></p>
 
     <div class="field">
@@ -144,6 +149,7 @@
         <button type="button" data-hand="both">Las dos</button>
       </div>
       <p id="handHint" class="hint hidden">Esta pieza solo tiene melodía: se toca con la mano derecha.</p>
+      <p id="fitHint" class="hint warn hidden"></p>
     </div>
 
     <div class="field hidden" id="tempoField">

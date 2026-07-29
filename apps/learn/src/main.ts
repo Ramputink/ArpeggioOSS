@@ -32,7 +32,7 @@ import {
   type Stats,
 } from "./gamification.js";
 import { BRAND_MARK, icon } from "./icons.js";
-import { KeyboardView } from "./keyboard.js";
+import { KeyboardView, MIN_KEY_WIDTH, whiteKeysNeeded } from "./keyboard.js";
 import { Runner, type PracticeMode, type RunSummary } from "./runner.js";
 import { StaffView, noteName, octaveOf, type Clef, type StaffNote } from "./staff.js";
 import {
@@ -192,9 +192,11 @@ function songCard(s: Song, indexInLevel: number, progress?: SongProgress): HTMLB
 
   const body = document.createElement("span");
   body.className = "card-body";
+  // Composer and tempo only: the time signature and bar count live on the setup
+  // sheet, where there is room for them without wrapping this line.
   body.append(
     el("span", "card-title", s.title),
-    el("span", "card-meta", `${s.composer} · ${s.beats}/${s.beatType} · ${s.bpm} ppm`),
+    el("span", "card-meta", `${s.composer} · ${s.bpm} ppm`),
   );
 
   const rating = document.createElement("span");
@@ -402,6 +404,11 @@ function openSetup(s: Song): void {
   song = s;
   bpm = s.bpm;
   $("setupTitle").textContent = s.title;
+  const bars = Math.max(...songToScore(s).events.map((e) => e.measure));
+  $("setupMeta").textContent =
+    `${s.composer} · ${s.beats}/${s.beatType} · ${s.bpm} ppm · ` +
+    plural(bars, "compás", "compases") +
+    (s.left ? " · dos manos" : " · solo melodía");
   $("setupTip").textContent = s.tip;
   $<HTMLInputElement>("tempo").value = String(bpm);
   $("bpmOut").textContent = String(bpm);
@@ -417,7 +424,36 @@ function openSetup(s: Song): void {
   setSegment("handSel", "hand", effectiveHand());
   $("modeHelp").textContent = MODE_HELP[prefs.mode];
   $("tempoField").classList.toggle("hidden", prefs.mode !== "demo");
+  updateFitHint();
   openSheet("setup");
+}
+
+/**
+ * Warn when the chosen combination will not fit the on-screen keyboard.
+ *
+ * A piece spanning three octaves cannot show all its keys at a tappable size on
+ * a 393 px phone — the keyboard scrolls, so the key for the other hand ends up
+ * off screen. Better to say so up front than to let the learner discover it
+ * halfway through a bar.
+ */
+function updateFitHint(): void {
+  const hint = $("fitHint");
+  if (!song || prefs.mode !== "keys") {
+    hint.classList.add("hidden");
+    return;
+  }
+  const pitches = songToScore(song, effectiveHand()).events.map((e) => e.pitchMidi);
+  const needed = whiteKeysNeeded(Math.min(...pitches), Math.max(...pitches)) * MIN_KEY_WIDTH;
+  // The keyboard spans the viewport width minus the landscape side insets.
+  const available = document.documentElement.clientWidth;
+  const fits = needed <= available;
+  hint.classList.toggle("hidden", fits);
+  if (!fits) {
+    hint.textContent =
+      effectiveHand() === "both"
+        ? "Con las dos manos no caben todas las teclas en la pantalla. Practica una mano cada vez, o elige «Mi piano»."
+        : "Esta pieza es más ancha que la pantalla: el teclado se desplazará solo hasta la tecla que toca.";
+  }
 }
 
 /**
@@ -444,6 +480,7 @@ for (const b of document.querySelectorAll<HTMLButtonElement>("#modeSel button"))
     setSegment("modeSel", "mode", prefs.mode);
     $("modeHelp").textContent = MODE_HELP[prefs.mode];
     $("tempoField").classList.toggle("hidden", prefs.mode !== "demo");
+    updateFitHint();
   });
 }
 
@@ -453,6 +490,7 @@ for (const b of document.querySelectorAll<HTMLButtonElement>("#handSel button"))
     prefs = { ...prefs, hand: b.dataset.hand as HandChoice };
     savePrefs(prefs);
     setSegment("handSel", "hand", prefs.hand);
+    updateFitHint();
   });
 }
 

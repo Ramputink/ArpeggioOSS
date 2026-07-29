@@ -58,6 +58,41 @@ wrong one and the cursor stays put and tells you which key to press. That is the
 "follow-you" follower from `@arpeggio/practice-engine` — the same engine the
 desktop app and the future iOS build use.
 
+## Target device
+
+The layout is designed against an **iPhone 15 Pro**: a 393 × 852 CSS viewport,
+with a 59 px Dynamic Island inset at the top and a 34 px home-indicator inset at
+the bottom when installed to the home screen. Everything else scales from there.
+
+Safe areas go through four custom properties (`--safe-top` and friends) rather
+than `env()` at each use site, which is what makes that budget checkable — set
+them by hand and the layout can be inspected at any device's insets:
+
+```js
+document.documentElement.style.setProperty("--safe-top", "59px");
+document.documentElement.style.setProperty("--safe-bottom", "34px");
+```
+
+On that screen the play column comes out as 59 inset + 58 bar + 3 progress +
+**500 staff** + 46 cue + 152 keys + 34 inset. The staff getting the largest share
+is the point: it is the thing being read.
+
+Two consequences worth knowing about:
+
+- **White keys have a 32 px floor**, not the 44 px Apple suggests for discrete
+  controls. A piano key is 150 px tall and flush with its neighbours, so it is
+  aimed at like a letter on the iOS keyboard. At 32 px the phone shows twelve
+  keys instead of nine, which is the difference between seeing both hands' next
+  keys and not.
+- **Horizontal scale follows the shortest note in the piece**, so a bar of
+  sixteenths scrolls faster rather than overlapping its own note heads, and a
+  piece of quarter notes stays spacious. Likewise the clef/key-signature gutter is
+  sized from its contents: a fixed gutter wide enough for four sharps would eat a
+  third of the screen on a piece in C major.
+
+When a piece genuinely cannot fit — Für Elise spans three and a half octaves —
+the setup sheet says so instead of letting the learner discover it mid-bar.
+
 ## Architecture
 
 ```

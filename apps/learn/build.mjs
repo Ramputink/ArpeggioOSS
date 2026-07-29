@@ -11,6 +11,7 @@
  * microphone session on a piece with chords.
  */
 import { context, build } from "esbuild";
+import { watch as watchDir } from "node:fs";
 import { cp, mkdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -59,6 +60,17 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     await copyBasicPitchModel();
     const ctx = await context(buildOptions);
     await ctx.watch();
+    // esbuild only watches the module graph, so index.html / styles.css / the
+    // manifest would otherwise be whatever they were when the server started —
+    // an easy way to spend ten minutes debugging a change that was never served.
+    let pending = null;
+    watchDir(join(here, "public"), { recursive: true }, () => {
+      clearTimeout(pending);
+      pending = setTimeout(async () => {
+        await cp(join(here, "public"), outdir, { recursive: true });
+        console.log("[watch] public/ copied");
+      }, 60);
+    });
     // 0.0.0.0 so a phone on the same Wi-Fi can open it. Note: the microphone
     // needs a secure context, so mic practice over the LAN requires
     // `npm run share` (HTTPS); on-screen keyboard practice works over plain HTTP.
