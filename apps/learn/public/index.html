@@ -47,26 +47,23 @@
         </div>
       </header>
 
-      <!-- First run only: what this app expects of you. -->
+      <!--
+        First run. One question, because the answer is the single setting that
+        decides whether the app works at all for this person — and getting it
+        wrong looks exactly like a broken app: you press the keys of your piano
+        and nothing on screen moves.
+      -->
       <section id="intro" class="panel hidden" aria-labelledby="introTitle">
-        <h2 id="introTitle">Cómo funciona</h2>
-        <ul class="howto">
-          <li>
-            <span class="howto-icon" data-icon="keys"></span>
-            <span><b>No necesitas piano</b>Toca el teclado de la pantalla y suena de verdad.</span>
-          </li>
-          <li>
-            <span class="howto-icon" data-icon="note"></span>
-            <span
-              ><b>La partitura te espera</b>Avanza cuando aciertas; si dudas, se queda quieta.</span
-            >
-          </li>
-          <li>
-            <span class="howto-icon" data-icon="mic"></span>
-            <span><b>¿Ya tienes piano?</b>Elige «Mi piano» y te escucha por el micrófono.</span>
-          </li>
-        </ul>
-        <button id="introDone" class="btn btn-primary">Empezar</button>
+        <h2 id="introTitle">¿Tienes un piano delante?</h2>
+        <p class="tip">Una pregunta y empezamos. Puedes cambiarlo cuando quieras.</p>
+        <div class="introchoice">
+          <button id="introPiano" class="btn btn-primary">Sí, tengo piano o teclado</button>
+          <button id="introScreen" class="btn btn-outline">No, toco en la pantalla</button>
+        </div>
+        <p class="micro">
+          Con piano, la app te escucha por el micrófono. Sin piano, tocas el teclado de la pantalla
+          y suena igual.
+        </p>
       </section>
 
       <!-- Level, experience and achievements at a glance. -->
@@ -85,9 +82,11 @@
         <span id="profileChevron" class="profile-chevron" aria-hidden="true"></span>
       </button>
 
-      <button id="hero" class="hero hidden" type="button">
+      <!-- The one thing to press. Always there and always specific: on a first
+           run it names the easiest piece; afterwards, what to continue with. -->
+      <button id="hero" class="hero" type="button">
         <span class="hero-text">
-          <span class="eyebrow">Continuar</span>
+          <span id="heroEyebrow" class="eyebrow">Empieza aquí</span>
           <strong id="heroTitle"></strong>
           <span id="heroSub" class="muted"></span>
         </span>
@@ -97,9 +96,6 @@
       <div class="quickrow">
         <button id="sessionBtn" class="quick" type="button">
           <i data-icon="clock" aria-hidden="true"></i><span>Sesión de 10 min</span>
-        </button>
-        <button id="importBtn" class="quick" type="button">
-          <i data-icon="upload" aria-hidden="true"></i><span>Importar partitura</span>
         </button>
         <input id="importFile" type="file" accept=".musicxml,.xml,.mxl" class="hidden" />
       </div>
@@ -169,6 +165,11 @@
       </div>
 
       <div id="cue" class="cue" aria-live="polite"><span class="cue-text">Preparado</span></div>
+
+      <!-- What the microphone is actually hearing. Without this, "it doesn't
+       recognise my DO4", "it is hearing DO5" and "it is hearing nothing" look
+       identical to the learner — and they need completely different fixes. -->
+      <p id="heard" class="heard hidden" aria-live="off"></p>
 
       <div id="keyboard" class="keyboard"></div>
 
@@ -355,6 +356,9 @@
         <button id="micCheckBtn" class="btn btn-outline" style="margin-top: 14px">
           Comprobar el micrófono
         </button>
+        <!-- Moved out of the home screen: it is an advanced action, and it was
+             taking half of the row a beginner needs for "start here". -->
+        <button id="importBtn" class="btn btn-outline"><span>Importar partitura</span></button>
         <p class="micro" id="aboutLine"></p>
         <button id="resetProgress" class="btn btn-quiet danger">Borrar mi progreso</button>
         <div class="sheet-actions">

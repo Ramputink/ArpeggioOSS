@@ -21,6 +21,7 @@ import {
   MODE_HELP,
   fiveFingerSpan,
   handPositionText,
+  pitchLabel,
   plural,
   wrongNoteMessage,
 } from "./copy.js";
@@ -31,7 +32,7 @@ import { BRAND_MARK, icon } from "./icons.js";
 import { KeyboardView, MIN_KEY_WIDTH, whiteKeysNeeded } from "./keyboard.js";
 import { latencyVerdict } from "./latency.js";
 import { renderAchievements, renderLibrary, type LibraryHandlers } from "./libraryView.js";
-import { wireMicCheck } from "./micCheckView.js";
+import { openMicCheck, wireMicCheck } from "./micCheckView.js";
 import { isCompressedMusicXML, readMxl } from "./mxl.js";
 import { addImported, pieceFromSong, removeImported, type Piece } from "./pieces.js";
 import { PracticeClock } from "./practiceTime.js";
@@ -117,8 +118,8 @@ for (const node of document.querySelectorAll<HTMLElement>("[data-icon]")) {
   node.innerHTML = icon(node.dataset.icon ?? "", size);
 }
 $("footNote").textContent =
-  "Diecinueve piezas de dominio público, de la más fácil a la más difícil, más los " +
-  "ejercicios de técnica. Empieza por «María tenía un corderito»: solo usa tres dedos.";
+  "Diecinueve piezas de dominio público, de la más fácil a la más difícil, " +
+  "más los ejercicios de técnica.";
 
 // ---------------------------------------------------------------------------
 // Theme
@@ -301,20 +302,44 @@ $("resetProgress").addEventListener("click", () => {
 });
 
 // ---------------------------------------------------------------------------
-// First run
-// ---------------------------------------------------------------------------
-if (!prefs.introSeen) show("intro", true);
-$("introDone").addEventListener("click", () => {
-  setPrefs({ introSeen: true });
-  show("intro", false);
-});
-
-// ---------------------------------------------------------------------------
 // Microphone check
 // ---------------------------------------------------------------------------
-// Its own module: it is a self-contained diagnostic, and the only thing it needs
-// from the rest of the app is the latency the last microphone run measured.
+// Its own module: a self-contained diagnostic whose only tie to the rest of the
+// app is the latency the last microphone run measured.
 wireMicCheck(() => runner?.latency ?? null);
+
+// ---------------------------------------------------------------------------
+// First run
+// ---------------------------------------------------------------------------
+/**
+ * One question: is there a piano in front of you?
+ *
+ * It is the only setting that decides whether the app works at all for this
+ * person, and getting it wrong does not look like a wrong setting — it looks
+ * like a broken app. You press the keys of your piano and nothing on screen
+ * moves, because the app is patiently waiting for a tap.
+ *
+ * The old first run was three bullet points explaining the app and then left
+ * the learner on the library screen with twenty-nine pieces and no idea which
+ * one to press.
+ */
+if (!prefs.introSeen) show("intro", true);
+
+function chooseMode(mode: PracticeMode): void {
+  setPrefs({ mode, introSeen: true });
+  show("intro", false);
+  syncKeyboardVisibility();
+  refreshLibrary();
+}
+
+$("introScreen").addEventListener("click", () => chooseMode("keys"));
+$("introPiano").addEventListener("click", () => {
+  chooseMode("mic");
+  // Straight into the microphone check, because "can it hear my piano?" is the
+  // question that has to be answered before anything else is worth trying — and
+  // it is the failure that is impossible to diagnose from the practice screen.
+  openMicCheck();
+});
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -477,7 +502,7 @@ async function startPractice(): Promise<void> {
     accompany: otherHandNotes(hand),
     modelUrl: MODEL_URL,
     workerUrl: WORKER_URL,
-    hooks: { onProgress, onJudge, onStatus, onFinish },
+    hooks: { onProgress, onJudge, onStatus, onFinish, onHeard },
   });
 
   const notes: StaffNote[] = runner.notes.map((n, i) => ({
@@ -519,6 +544,8 @@ async function startPractice(): Promise<void> {
   syncKeyboardVisibility();
   keyboard.relayout();
   syncPauseButton();
+  show("heard", prefs.mode === "mic");
+  if (prefs.mode === "mic") $("heard").textContent = "Escuchando…";
   $("ctrlLoop").setAttribute("aria-pressed", String(loopBars !== null));
   // Hands on the keys means nothing will tap the screen for twenty minutes.
   void awake.acquire();
@@ -708,6 +735,42 @@ function onJudge(event: { kind: string; playedMidi?: number; octaveOff?: number 
  * exactly what "Toca las teclas marcadas" did to the hand-placement message it
  * arrived one tick after.
  */
+/**
+ * Show what the microphone is hearing, whether or not it was accepted.
+ *
+ * This is a diagnostic, and it exists because the app was silently failing in a
+ * way the learner could not possibly diagnose: it asks for a DO4, they play a
+ * DO4, and nothing happens. Now they can see whether it heard a DO5, heard
+ * nothing at all, or heard exactly the right note and rejected it — three
+ * different bugs that used to look like one.
+ */
+let heardUntil = 0;
+function onHeard(midis: number[]): void {
+  if (prefs.mode !== "mic") return;
+  const box = $("heard");
+  heardUntil = Date.now() + 1400;
+  box.classList.remove("hidden", "deaf");
+  const sharps = piece?.sharps ?? 0;
+  box.textContent =
+    midis.length === 0
+      ? "Te oigo, pero no distingo la nota"
+      : `Te oigo: ${midis.map((m) => pitchLabel(m, sharps)).join(" · ")}`;
+  window.setTimeout(() => {
+    if (Date.now() >= heardUntil) fadeHeard();
+  }, 1500);
+}
+
+/** Nothing has been heard for a while: say so, because silence is a symptom. */
+function fadeHeard(): void {
+  const box = $("heard");
+  if ($("play").classList.contains("hidden") || prefs.mode !== "mic") {
+    box.classList.add("hidden");
+    return;
+  }
+  box.classList.add("deaf");
+  box.textContent = "No oigo el piano…";
+}
+
 function onStatus(text: string): void {
   if (cueHeldUntil > Date.now()) return;
   setCueMessage(text);
@@ -732,6 +795,8 @@ $("ctrlPause").addEventListener("click", () => {
     runner.pause();
   }
   syncPauseButton();
+  show("heard", prefs.mode === "mic");
+  if (prefs.mode === "mic") $("heard").textContent = "Escuchando…";
 });
 
 /**

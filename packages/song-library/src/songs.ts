@@ -24,6 +24,26 @@ import type { Level, Song } from "./types.js";
 export const SONGS: Song[] = [
   // --- Level 1 — five-finger C position, right hand -------------------------
   {
+    id: "mary-lamb",
+    title: "María tenía un corderito",
+    composer: "Tradicional",
+    level: 1,
+    bpm: 88,
+    beats: 4,
+    beatType: 4,
+    sharps: 0,
+    // First in the list, not second: it is the only piece in the library that
+    // never moves the hand at all, and "which one do I press first" is the
+    // question a beginner actually has.
+    tip: "Tu primera canción. Solo tres dedos: pulgar en DO, índice en RE y corazón en MI, y la mano no se mueve.",
+    startPosition: { right: 60 },
+    // Everything sits under one hand in the five-finger position, so the digits
+    // are unambiguous (1 = thumb on DO … 5 = little finger on SOL).
+    right:
+      "E4/3 D4/2 C4/1 D4/2 | E4/3 E4/3 E4/3:2 | D4/2 D4/2 D4/2:2 | E4/3 G4/5 G4/5:2 | " +
+      "E4/3 D4/2 C4/1 D4/2 | E4/3 E4/3 E4/3 E4/3 | D4/2 D4/2 E4/3 D4/2 | C4/1:4",
+  },
+  {
     id: "twinkle",
     title: "Estrellita, ¿dónde estás?",
     composer: "Tradicional",
@@ -45,23 +65,6 @@ export const SONGS: Song[] = [
       "C3/5:4 | F3/2:2 C3/5:2 | F3/2:2 C3/5:2 | G3/1:2 C3/5:2 | " +
       "C3/5:2 F3/2:2 | C3/5:2 G3/1:2 | C3/5:2 F3/2:2 | C3/5:2 G3/1:2 | " +
       "C3/5:4 | F3/2:2 C3/5:2 | F3/2:2 C3/5:2 | G3/1:2 C3/5:2",
-  },
-  {
-    id: "mary-lamb",
-    title: "María tenía un corderito",
-    composer: "Tradicional",
-    level: 1,
-    bpm: 88,
-    beats: 4,
-    beatType: 4,
-    sharps: 0,
-    tip: "Solo usa tres dedos: pulgar en DO, índice en RE y corazón en MI. Es la mejor primera canción.",
-    startPosition: { right: 60 },
-    // Everything sits under one hand in the five-finger position, so the digits
-    // are unambiguous (1 = thumb on DO … 5 = little finger on SOL).
-    right:
-      "E4/3 D4/2 C4/1 D4/2 | E4/3 E4/3 E4/3:2 | D4/2 D4/2 D4/2:2 | E4/3 G4/5 G4/5:2 | " +
-      "E4/3 D4/2 C4/1 D4/2 | E4/3 E4/3 E4/3 E4/3 | D4/2 D4/2 E4/3 D4/2 | C4/1:4",
   },
   {
     id: "ode-to-joy",

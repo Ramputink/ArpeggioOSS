@@ -7,15 +7,22 @@ it is done the rest of the ordering is guesswork.
 
 ---
 
-## 0. One hour at a real piano
+## 0. Back to the real piano — now with something to measure
 
-**Every claim the app makes about its core feature is still unverified.**
+**The first session at a real piano happened, and it failed: the app did not
+recognise a plainly-played DO4.** The cause was in the engine, not the piano —
+escalating to MOTOR 2 discarded MOTOR 1's read, so any two-hand piece (and, via
+rule (d), most single-line ones too) fed the follower silence. Fixed, with tests
+that fail without the fix, and written up in `docs/CHORDS.md`.
 
-What has been proven: the engine follows a score, the combiner escalates to
-MOTOR 2 on a scored chord, Basic Pitch transcribes a synthetic triad, multi-touch
-chords work on the on-screen keyboard, ~148 tests pass. What has never happened:
-two keys struck on real strings, in a room with reverberation, with the sustain
-pedal down, through a phone microphone a metre away.
+That answers _one_ of the four questions below by finding a bug in front of it.
+The other three are still open, and now they can actually be reached:
+
+**Still unverified:** latency at a real piano, chord recall with the pedal down,
+and whether the new microphone tolerances (±1 octave, half a chord) are the right
+trade or too loose. What has been proven headlessly: the engine follows a score,
+MOTOR 1 survives a dead MOTOR 2, an octave-high detection is credited correctly,
+Basic Pitch transcribes a synthetic triad, ~156 tests pass.
 
 Four unknowns, all measurable in one sitting, all with the instrumentation
 already in the app:
@@ -41,12 +48,12 @@ idea:
 
 ## 1. Still open
 
-**1.1 `chordFraction` is 1 — every tone of a chord is required.** Exactly right for
-the on-screen keyboard, possibly brittle through a microphone where Basic Pitch
-may miss an inner voice of a three-note chord and park the cursor for ever. It is
-already a `FollowYouOptions` knob that `PracticeSession` never exposes. Decide it
-with the measurement in item 0, not from an armchair; if it needs relaxing, do it
-for microphone input only, since a tapped chord has no excuse.
+**1.1 The microphone tolerances are a guess in the right direction.** A mic run
+now accepts an octave error and half a chord; the keyboard still demands exactly
+the right key and every tone. Relaxing them was clearly better than a cursor that
+never moves, but "half a chord" is a number nobody has measured — it may be too
+loose to teach two hands honestly. This is the first thing the piano session in
+item 0 should judge.
 
 **1.2 `main.ts` is 1112 lines.** Down from 1292 while gaining pause,
 accompaniment, hand placement, `.mxl` import, practice time and session tracking

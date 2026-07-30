@@ -641,17 +641,48 @@ button {
   color: var(--accent-ink);
 }
 
+.introchoice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 14px 0 10px;
+}
+
 /* levels */
 .levels {
   display: flex;
   flex-direction: column;
   gap: 26px;
 }
+/* A section heading that is also its own disclosure control. */
 .level-head {
   display: flex;
   align-items: baseline;
   gap: 9px;
   margin-bottom: 3px;
+  cursor: pointer;
+  list-style: none;
+  padding: 4px 0;
+}
+.level-head::-webkit-details-marker {
+  display: none;
+}
+.level-chevron {
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: var(--faint);
+  transform: rotate(90deg);
+  transition: transform 0.16s var(--ease);
+}
+details[open] > .level-head .level-chevron {
+  transform: rotate(-90deg);
+}
+/* Closed sections collapse to a single row: the goal line and the cards only
+   exist once the learner asks for them. */
+details.level:not([open]) > .level-goal,
+details.level:not([open]) > .cards,
+details.level:not([open]) > .linkbtn {
+  display: none;
 }
 .level-chip {
   flex: 0 0 auto;
@@ -1207,6 +1238,26 @@ button {
 }
 .meter i.low {
   background: var(--accent);
+}
+
+/* What the microphone hears: quiet, monospaced digits, never competing with the
+   cue above it — a diagnostic, not an instruction. */
+.heard {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0 12px 4px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  min-height: 16px;
+}
+.heard.deaf {
+  color: var(--bad);
+}
+body[data-stand="1"] .heard {
+  font-size: 15px;
+  padding-bottom: 6px;
 }
 
 /* ------------------------------------------------------------- stand mode */

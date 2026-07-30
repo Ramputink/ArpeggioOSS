@@ -28,12 +28,15 @@ const NOISY_ROOM_RMS = 0.02;
 
 const micCheck = new MicCheck();
 let heardTarget = false;
+/** Where the latency figure comes from; set once by {@link wireMicCheck}. */
+let latencyOf: () => LatencyStats | null = () => null;
 
 /** Wire the sheet up once, at boot. */
 export function wireMicCheck(latency: () => LatencyStats | null): void {
+  latencyOf = latency;
   $("micCheckBtn").addEventListener("click", () => {
     closeSheet("settings");
-    open(latency());
+    openMicCheck();
   });
 
   $("micStart").addEventListener("click", () => void listen());
@@ -44,7 +47,9 @@ export function wireMicCheck(latency: () => LatencyStats | null): void {
   });
 }
 
-function open(stats: LatencyStats | null): void {
+/** Open the check. Also the first thing a learner with a piano is shown. */
+export function openMicCheck(): void {
+  const stats = latencyOf();
   heardTarget = false;
   $("micVerdict").textContent = "Pulsa «Escuchar» y toca cualquier tecla.";
   $("micPitch").textContent = "—";

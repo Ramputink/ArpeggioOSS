@@ -10,7 +10,14 @@
  * Pure rendering: it is handed the stored state and a set of callbacks, and it
  * owns no state of its own except which section is in edit mode.
  */
-import { EXERCISES, LEVEL_GOALS, LEVEL_NAMES, SONGS, type Level } from "@arpeggio/song-library";
+import {
+  EXERCISES,
+  LEVEL_GOALS,
+  LEVEL_NAMES,
+  SONGS,
+  type Level,
+  type Song,
+} from "@arpeggio/song-library";
 
 import { HAND_LABEL, plural } from "./copy.js";
 import { $, el } from "./dom.js";
@@ -46,41 +53,84 @@ export function renderLibrary(
   handlers: LibraryHandlers,
 ): void {
   renderProfile(stats);
-  renderHero(progress, prefs, handlers);
+  renderNextUp(progress, prefs, handlers);
 
   const list = $("songList");
   list.replaceChildren();
+
+  // Only the tier being worked on is open. Nineteen pieces, ten exercises and
+  // eight headings expanded at once is a wall, and what a beginner needs first
+  // is not a catalogue — it is to know which one to press.
+  const current = currentLevel(progress);
 
   ([1, 2, 3, 4, 5, 6] as Level[]).forEach((level) => {
     const songs = SONGS.filter((s) => s.level === level);
     if (songs.length === 0) return;
     const done = songs.filter((s) => starsFor(progress[s.id]) > 0).length;
-
-    const section = document.createElement("section");
-    section.className = "level";
-    section.append(
-      sectionHead(`Nivel ${level}`, LEVEL_NAMES[level], `${done}/${songs.length}`),
-      el("p", "level-goal", LEVEL_GOALS[level]),
-      cardRow(
-        songs.map((s, i) => pieceCard(pieceFromSong(s), String(i + 1), progress[s.id], handlers)),
-      ),
+    list.append(
+      collapsible({
+        chip: `Nivel ${level}`,
+        title: LEVEL_NAMES[level],
+        count: `${done}/${songs.length}`,
+        blurb: LEVEL_GOALS[level],
+        open: level === current,
+        body: cardRow(
+          songs.map((s, i) => pieceCard(pieceFromSong(s), String(i + 1), progress[s.id], handlers)),
+        ),
+      }),
     );
-    list.append(section);
   });
 
   renderExercises(progress, list, handlers);
   renderImported(progress, list, handlers);
 }
 
-function sectionHead(chip: string, title: string, count: string): HTMLElement {
-  const head = document.createElement("div");
+/** The lowest tier with something still unfinished — where the learner is. */
+function currentLevel(progress: Record<string, SongProgress>): Level {
+  for (const level of [1, 2, 3, 4, 5, 6] as Level[]) {
+    if (SONGS.some((s) => s.level === level && starsFor(progress[s.id]) === 0)) return level;
+  }
+  return 6;
+}
+
+interface Section {
+  chip: string;
+  title: string;
+  count: string;
+  blurb: string;
+  open: boolean;
+  body: HTMLElement;
+  /** An extra control inside the section (the imported-scores edit toggle). */
+  action?: HTMLElement;
+}
+
+/**
+ * A section that is a single row until it is opened.
+ *
+ * `<details>` rather than a click handler and a boolean: it is a disclosure, the
+ * browser already knows what one of those is, and it keeps working for a
+ * keyboard and a screen reader without any of that being written here.
+ */
+function collapsible(section: Section): HTMLElement {
+  const box = document.createElement("details");
+  box.className = "level";
+  box.open = section.open;
+
+  const head = document.createElement("summary");
   head.className = "level-head";
   head.append(
-    el("span", "level-chip", chip),
-    el("h2", "", title),
-    el("span", "level-count", count),
+    el("span", "level-chip", section.chip),
+    el("h2", "", section.title),
+    el("span", "level-count", section.count),
   );
-  return head;
+  const chevron = el("span", "level-chevron", "");
+  chevron.innerHTML = icon("chevron", 16);
+  head.append(chevron);
+
+  box.append(head, el("p", "level-goal", section.blurb));
+  if (section.action) box.append(section.action);
+  box.append(section.body);
+  return box;
 }
 
 function cardRow(cards: HTMLElement[]): HTMLElement {
@@ -93,9 +143,9 @@ function cardRow(cards: HTMLElement[]): HTMLElement {
 /**
  * Technique warm-ups.
  *
- * Below the curriculum rather than above it: a beginner opening the app for the
- * first time should see "Estrellita", not a scale. But they are in the library
- * and in the guided session, which is where they get played.
+ * Below the curriculum and closed by default: a beginner opening the app should
+ * see "Estrellita", not a scale. They are here, and in the guided session, which
+ * is where they actually get played.
  */
 function renderExercises(
   progress: Record<string, SongProgress>,
@@ -103,18 +153,19 @@ function renderExercises(
   handlers: LibraryHandlers,
 ): void {
   const done = EXERCISES.filter((s) => starsFor(progress[s.id]) > 0).length;
-  const section = document.createElement("section");
-  section.className = "level";
-  section.append(
-    sectionHead("Técnica", "Calentamiento", `${done}/${EXERCISES.length}`),
-    el(
-      "p",
-      "level-goal",
-      "Patrones cortos que enseñan la mano, no la pieza. Un par de minutos antes de tocar cambia el día entero.",
-    ),
-    cardRow(EXERCISES.map((s) => pieceCard(pieceFromSong(s), "•", progress[s.id], handlers))),
+  list.append(
+    collapsible({
+      chip: "Técnica",
+      title: "Calentamiento",
+      count: `${done}/${EXERCISES.length}`,
+      blurb:
+        "Patrones cortos que enseñan la mano, no la pieza. Un par de minutos antes de tocar cambia el día entero.",
+      open: false,
+      body: cardRow(
+        EXERCISES.map((s) => pieceCard(pieceFromSong(s), "•", progress[s.id], handlers)),
+      ),
+    }),
   );
-  list.append(section);
 }
 
 /** "Mis partituras": whatever the learner brought in as MusicXML. */
@@ -128,10 +179,6 @@ function renderImported(
     editingImported = false;
     return;
   }
-
-  const section = document.createElement("section");
-  section.className = "level";
-  const head = sectionHead("Tuyas", "Mis partituras", String(records.length));
 
   // An explicit edit toggle, not a long press. The previous version wired
   // deletion to `contextmenu` and told the learner to "hold with the right
@@ -147,7 +194,6 @@ function renderImported(
     editingImported = !editingImported;
     handlers.onRefresh();
   });
-  head.append(edit);
 
   const cards: HTMLElement[] = [];
   for (const record of records) {
@@ -165,18 +211,19 @@ function renderImported(
     );
   }
 
-  section.append(
-    head,
-    el(
-      "p",
-      "level-goal",
-      editingImported
+  list.append(
+    collapsible({
+      chip: "Tuyas",
+      title: "Mis partituras",
+      count: String(records.length),
+      blurb: editingImported
         ? "Pulsa la papelera para quitar una partitura."
         : "Partituras que has importado tú, en MusicXML (.musicxml o .mxl).",
-    ),
-    cardRow(cards),
+      open: editingImported,
+      action: edit,
+      body: cardRow(cards),
+    }),
   );
-  list.append(section);
 }
 
 /** An imported card with its delete button beside it. */
@@ -261,24 +308,52 @@ export function nextAchievement(stats: Stats): Achievement | undefined {
   )[0];
 }
 
-function renderHero(
+/**
+ * The one thing to press.
+ *
+ * The library used to open on a profile card, two buttons and twenty-nine
+ * pieces, and answered the only question a beginner actually has — "where do I
+ * start?" — nowhere. This answers it, in one sentence, always:
+ *
+ *   nothing played yet  -> the easiest piece in the library, by name
+ *   something in progress -> that piece
+ *   that piece finished -> the next one in the curriculum
+ *
+ * It also states, in words, how you are about to play (screen, piano, listen),
+ * because choosing "Mi piano" is invisible otherwise — and a learner pressing
+ * the keys of a real piano while the app is waiting for taps on the screen sees
+ * an app that is simply broken.
+ */
+function renderNextUp(
   progress: Record<string, SongProgress>,
   prefs: Prefs,
   handlers: LibraryHandlers,
 ): void {
-  const hero = $<HTMLButtonElement>("hero");
-  const lastId = Object.entries(progress).sort((a, b) => b[1].lastPlayed - a[1].lastPlayed)[0]?.[0];
-  const last = [...SONGS, ...EXERCISES].find((s) => s.id === lastId);
-  if (!last) {
-    hero.classList.add("hidden");
-    return;
-  }
-  hero.classList.remove("hidden");
-  $("heroTitle").textContent = last.title;
-  $("heroSub").textContent = `${last.composer} · ${HAND_LABEL[prefs.hand]}`;
+  const target = nextUp(progress);
+  const fresh = Object.keys(progress).length === 0;
+
+  $("heroEyebrow").textContent = fresh ? "Empieza aquí" : "Continuar";
+  $("heroTitle").textContent = target.title;
+  $("heroSub").textContent = `${MODE_LABEL[prefs.mode]} · ${HAND_LABEL[prefs.hand]}`;
   // Assigned, not added: this runs on every return to the library screen, and
   // `addEventListener` would fire the handler once per visit ever made.
-  hero.onclick = () => handlers.onOpen(pieceFromSong(last));
+  $<HTMLButtonElement>("hero").onclick = () => handlers.onOpen(pieceFromSong(target));
+}
+
+/** How the learner is about to play, in words rather than a hidden setting. */
+const MODE_LABEL: Record<string, string> = {
+  keys: "En la pantalla",
+  mic: "Con tu piano",
+  demo: "Escuchando",
+};
+
+/** The piece to offer: what is in progress, or the next one never finished. */
+function nextUp(progress: Record<string, SongProgress>): Song {
+  const lastId = Object.entries(progress).sort((a, b) => b[1].lastPlayed - a[1].lastPlayed)[0]?.[0];
+  const last = [...SONGS, ...EXERCISES].find((s) => s.id === lastId);
+  // Still working on it: three stars means done, anything less means come back.
+  if (last && starsFor(progress[last.id]) < 3) return last;
+  return SONGS.find((s) => starsFor(progress[s.id]) === 0) ?? last ?? SONGS[0];
 }
 
 // ---------------------------------------------------------------------------
