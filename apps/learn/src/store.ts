@@ -38,6 +38,17 @@ export interface Prefs {
   haptics: boolean;
   /** Set once the first-run explainer has been dismissed. */
   introSeen: boolean;
+  /** Music-stand layout: no on-screen keyboard, large notation, big controls. */
+  stand: boolean;
+  /** Audible click on every beat while playing. */
+  metronome: boolean;
+  /** Static system with a moving cursor, instead of continuous scrolling. */
+  pageView: boolean;
+  /**
+   * "A tempo": the cursor keeps going and grades timing, instead of waiting for
+   * the learner. The honest mode for rhythm, and the one to graduate to.
+   */
+  aTempo: boolean;
 }
 
 const DEFAULT_PREFS: Prefs = {
@@ -48,6 +59,10 @@ const DEFAULT_PREFS: Prefs = {
   countIn: true,
   haptics: true,
   introSeen: false,
+  stand: false,
+  metronome: false,
+  pageView: false,
+  aTempo: false,
 };
 
 function read<T>(key: string, fallback: T): T {

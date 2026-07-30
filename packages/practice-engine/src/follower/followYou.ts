@@ -143,13 +143,17 @@ export class FollowYouFollower {
         this.advance();
       }
     } else {
-      // A confident, unexpected pitch: report it but hold the cursor.
+      // A confident, unexpected pitch: report it but hold the cursor. When the
+      // pitch class was right, say how far off the octave was — that is a
+      // misplaced hand, which is a different fix from a misread note.
+      const octaveOff = octaveDisplacement(group, note.midi);
       events.push({
         kind: "wrong",
         expectedMidi: group[0].midi,
         playedMidi: note.midi,
         atBeat,
         timeSec: note.onsetSec,
+        ...(octaveOff !== undefined ? { octaveOff } : {}),
       });
     }
 
@@ -230,4 +234,24 @@ export class FollowYouFollower {
     this.state.positionBeats = group[0].onset;
     this.state.waiting = true;
   }
+}
+
+/**
+ * How many octaves off a played pitch is from an expected one of the same pitch
+ * class, or `undefined` when no expected tone shares its pitch class.
+ *
+ * The nearest candidate wins: against a chord containing both C3 and C5, a
+ * played C4 reads as one octave off, not three.
+ */
+export function octaveDisplacement(
+  group: ExpectedNote[],
+  playedMidi: number,
+): number | undefined {
+  let best: number | undefined;
+  for (const expected of group) {
+    if (((expected.midi - playedMidi) % 12 + 12) % 12 !== 0) continue;
+    const octaves = (playedMidi - expected.midi) / 12;
+    if (best === undefined || Math.abs(octaves) < Math.abs(best)) best = octaves;
+  }
+  return best;
 }

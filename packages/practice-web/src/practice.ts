@@ -34,6 +34,19 @@ import type {
  */
 const WINDOW_FRAMES = 4;
 
+/** Construction knobs for {@link LivePractice}. */
+export interface LivePracticeOptions {
+  /**
+   * Frames batched into one processed window. Fewer frames means lower latency
+   * and more calls: a window cannot be judged until its last frame has been
+   * captured, so at 2048 samples and 44.1 kHz each frame costs 46 ms before any
+   * processing starts. 4 (the default) is ~186 ms of unavoidable delay, which is
+   * fine when tapping a screen and clearly visible at a real piano; 2 halves it
+   * and is the right choice for a monophonic line.
+   */
+  windowFrames?: number;
+}
+
 export class LivePractice {
   private readonly session: PracticeSession;
   /** Precomputed expected-note count — the practice "total" for progress. */
@@ -50,16 +63,24 @@ export class LivePractice {
   private stopped = false;
   /** Guards against emitting the final done-progress more than once. */
   private finished = false;
+  /** Frames per processed window; see {@link LivePracticeOptions.windowFrames}. */
+  private readonly windowFrames: number;
 
   /**
    * @param poly Optional real MOTOR 2 (polyphonic) detector. When omitted the
    *   session falls back to the built-in stub and only YIN (monophonic) runs —
    *   pass a `BasicPitchDetector` to actually transcribe chords.
    */
-  constructor(score: Score, callbacks: PracticeCallbacks, poly?: PolyphonicDetector) {
+  constructor(
+    score: Score,
+    callbacks: PracticeCallbacks,
+    poly?: PolyphonicDetector,
+    opts: LivePracticeOptions = {},
+  ) {
     this.session = new PracticeSession(score, poly ? { poly } : {});
     this.total = expectedNotesFromScore(score).length;
     this.callbacks = callbacks;
+    this.windowFrames = Math.max(1, Math.round(opts.windowFrames ?? WINDOW_FRAMES));
   }
 
   /**
@@ -116,7 +137,7 @@ export class LivePractice {
     // in chord mode runs slower than real time on a weak device), the queue would
     // grow without bound and latency would climb forever. Cap it and drop the
     // OLDEST frames — a bounded lag beats an ever-growing one.
-    const MAX_BUFFER_FRAMES = WINDOW_FRAMES * 8;
+    const MAX_BUFFER_FRAMES = this.windowFrames * 8;
     if (this.buffer.length > MAX_BUFFER_FRAMES) {
       this.buffer.splice(0, this.buffer.length - MAX_BUFFER_FRAMES);
     }
@@ -137,8 +158,8 @@ export class LivePractice {
     if (this.pumping) return;
     this.pumping = true;
     try {
-      while (this.buffer.length >= WINDOW_FRAMES && !this.stopped) {
-        const window = this.buffer.splice(0, WINDOW_FRAMES);
+      while (this.buffer.length >= this.windowFrames && !this.stopped) {
+        const window = this.buffer.splice(0, this.windowFrames);
         await this.processWindow(window);
       }
     } finally {

@@ -10,6 +10,7 @@ export { expectedNotesFromScore, groupChords } from "./expected.js";
 export { classifyError, type ClassifyOptions } from "./errors.js";
 export {
   FollowYouFollower,
+  octaveDisplacement,
   type FollowYouOptions,
   type FollowInput,
 } from "./followYou.js";

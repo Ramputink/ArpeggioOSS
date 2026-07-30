@@ -467,13 +467,79 @@ button {
 @keyframes keyhit { 0% { background: var(--ok); box-shadow: 0 0 22px -2px var(--ok); } 100% {} }
 @keyframes keymiss { 0% { background: var(--bad); box-shadow: 0 0 22px -2px var(--bad); } 100% {} }
 
-/* Landscape on a phone: give the staff back the height the chrome was using. */
+/*
+ * Landscape on a phone: give the staff back every pixel the chrome was using.
+ * This is the orientation a music desk holds the phone in, and the staff is the
+ * only thing on screen that has to be read from 60 cm away — so the bar, the cue
+ * and the stand controls all shrink to the smallest size that stays usable.
+ */
 @media (orientation: landscape) and (max-height: 520px) {
   .playbar { padding: 3px calc(10px + var(--safe-right)) 3px calc(10px + var(--safe-left)); }
   .playbar-title .muted { display: none; }
   .cue { min-height: 36px; }
   .kb-inner { height: 104px; }
+  body[data-stand="1"] .cue { min-height: 40px; }
+  body[data-stand="1"] .chip { font-size: 20px; padding: 4px 11px; }
+  .standbar { padding-top: 5px; padding-bottom: calc(5px + var(--safe-bottom)); }
+  .standbtn { min-height: 46px; flex-direction: row; gap: 7px; font-size: 12.5px; }
 }
+
+/* ----------------------------------------------------- quick actions & meter */
+.quickrow { display: flex; gap: 8px; margin-bottom: 22px; }
+.quick {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 46px; padding: 0 10px; border-radius: var(--r-md);
+  background: var(--surface); border: 1px solid var(--line); color: var(--fg);
+  font-size: 13px; font-weight: 600;
+}
+.quick:active { background: var(--surface-2); }
+.quick i { color: var(--accent); }
+
+.meter { height: 12px; border-radius: 6px; background: var(--surface-2); overflow: hidden; margin: 4px 0 10px; }
+.meter i {
+  display: block; height: 100%; width: 0; border-radius: 6px; background: var(--ok);
+  transition: width 0.08s linear, background 0.2s linear;
+}
+.meter i.hot { background: var(--bad); }
+.meter i.low { background: var(--accent); }
+
+/* ------------------------------------------------------------- stand mode */
+/*
+ * "Modo atril": the phone is propped on the piano's music desk, 50–70 cm away,
+ * and both hands are on the keys. So: no on-screen keyboard (it is dead weight
+ * and a feedback path into the microphone), notation about twice the size, and
+ * three targets big enough to hit with a glance.
+ */
+.standbar {
+  flex: 0 0 auto; display: flex; gap: 8px;
+  padding: 8px calc(12px + var(--safe-right)) calc(8px + var(--safe-bottom)) calc(12px + var(--safe-left));
+  background: var(--bg-2); border-top: 1px solid var(--line);
+}
+.standbtn {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; min-height: 62px; border-radius: var(--r-md);
+  background: var(--surface); border: 1px solid var(--line); color: var(--fg);
+  font-size: 13px; font-weight: 650;
+}
+.standbtn:active { background: var(--surface-2); }
+.standbtn[aria-pressed="true"] { background: var(--accent); border-color: transparent; color: var(--accent-ink); }
+
+body[data-stand="1"] .keyboard { display: none; }
+body[data-stand="1"] .cue { min-height: 62px; }
+body[data-stand="1"] .cue-lead { font-size: 15px; }
+body[data-stand="1"] .chip { font-size: 24px; padding: 6px 13px; }
+body[data-stand="1"] .chip sub { font-size: 13px; }
+body[data-stand="1"] .cue-text { font-size: 17px; }
+body[data-stand="1"] .playbar-title strong { font-size: 17px; }
+
+/* Portrait nudge: a music desk holds a phone in landscape, and that is also
+   where the staff gets the width it needs. */
+.rotate-hint {
+  position: absolute; inset: auto 12px 12px; padding: 9px 12px;
+  border-radius: var(--r-sm); background: var(--accent-soft); color: var(--accent);
+  font-size: 12.5px; font-weight: 600; text-align: center; pointer-events: none;
+}
+@media (orientation: landscape) { .rotate-hint { display: none; } }
 
 /* ------------------------------------------------------------------ sheets */
 .sheet {

@@ -38,6 +38,12 @@ const PATHS: Record<string, string> = {
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   note: '<path d="M9 18V6.5l9-2V16"/><circle cx="6.5" cy="18" r="2.6"/><circle cx="15.5" cy="16" r="2.6"/>',
   hand: '<path d="M8 12V5.5a1.6 1.6 0 0 1 3.2 0V11m0-1.5a1.6 1.6 0 0 1 3.2 0V12m0-1a1.6 1.6 0 0 1 3.2 0v4.5A5.5 5.5 0 0 1 12.2 21H11a6 6 0 0 1-6-6v-2.4a1.6 1.6 0 0 1 3.2 0"/>',
+  stand: '<path d="M12 3v13M5 21l7-5 7 5M4 8h16"/>',
+  loop: '<path d="M4 9V7a2 2 0 0 1 2-2h12l-3-3m3 11v2a2 2 0 0 1-2 2H4l3 3"/>',
+  metro: '<path d="M12 4 6 20h12L12 4z"/><path d="M8.6 13h6.8M12 13l6-7"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  upload: '<path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M4 16v2.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V16"/>',
+  page: '<rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/>',
 };
 
 /** One icon as an inline `<svg>` string. Unknown names render nothing. */

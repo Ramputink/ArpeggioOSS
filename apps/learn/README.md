@@ -45,7 +45,7 @@ HTTP on `:5174` (screen-keyboard practice works; the microphone does not).
 
 ## How to practise
 
-Pick a piece, then pick how you will play it:
+Two independent choices. **Input:**
 
 | Mode | What it does |
 |------|--------------|
@@ -53,10 +53,55 @@ Pick a piece, then pick how you will play it:
 | **Mi piano** | Listens through the microphone (MOTOR 1 = YIN; MOTOR 2 = Basic Pitch when the part has chords). |
 | **Escuchar** | The app plays the piece so you can hear it and follow the notation. |
 
-The score **waits for you**. Play the right note and it glides forward; play a
-wrong one and the cursor stays put and tells you which key to press. That is the
-"follow-you" follower from `@arpeggio/practice-engine` — the same engine the
-desktop app and the future iOS build use.
+**Judging:**
+
+| Mode | What it does |
+|------|--------------|
+| **Te espera** | The cursor waits on every note. Forgiving, and says nothing about rhythm — right for reading a piece for the first time. |
+| **A tempo** | The cursor keeps going at the tempo and grades you early/late/missed. The honest mode, and the one to graduate to. |
+
+Wait mode is the "follow-you" follower from `@arpeggio/practice-engine`; a-tempo
+grading is `aTempo.ts`, and a learner who restarts from the middle is found again
+by the DTW aligner rather than leaving the cursor stuck.
+
+## At a real piano — "modo atril"
+
+Put the phone on the music desk and turn on **Modo atril** (the ⏶ button on the
+play screen, or Ajustes). It changes the assumptions rather than the styling:
+
+- **no on-screen keyboard** — it is dead weight when your hands are on the keys,
+  and a path from the speaker back into the microphone;
+- **notation about twice the size** (staff space 34 px instead of 22), because you
+  are reading from 60 cm, not 30;
+- **three controls big enough to hit without looking** — Repetir, Bucle, Parar;
+- **the screen stays awake** (`wakeLock.ts`), which is a total blocker otherwise:
+  the phone locks mid-piece and you cannot tap to wake it;
+- **landscape first**, which is how a music desk holds a phone and where the staff
+  gets its width.
+
+Also for a real instrument: **Comprobar el micrófono** in Ajustes shows a live
+input meter, asks you to play a DO to confirm what it hears, measures the room's
+noise floor, and reports the measured latency — so a session that fails is
+diagnosable instead of mysterious. See
+[`docs/MUSIC-STAND.md`](../../docs/MUSIC-STAND.md) for the reasoning and
+[`docs/NATIVE-IOS.md`](../../docs/NATIVE-IOS.md) for when a native app would be
+worth it (and the measurement that decides).
+
+## Practice tools
+
+- **Metrónomo** — clicks on every beat, scheduled on the audio clock so it does
+  not drift. Deliberately pitched at 1976/2637 Hz, above YIN's 1500 Hz search
+  range, so a click leaving the speaker is not transcribed as a note.
+- **Bucle** — drill the bars the student model rates weakest (or the bar you are
+  on). A loop is run as a piece in its own right, so the follower, the staff and
+  the progress bar need no special cases.
+- **Rampa de tempo** — after a clean run, take the same piece 10 % faster.
+- **Vista de página** — a static system with a moving cursor instead of continuous
+  scrolling: how you learn to read *ahead*.
+- **Sesión de 10 min** — warm up, fix what is failing, then something new, in that
+  order, planned from your own history (`session.ts`).
+- **Importar partitura** — a `.musicxml` file from a public-domain edition appears
+  under "Mis partituras" and plays like any built-in piece.
 
 ## Target device
 

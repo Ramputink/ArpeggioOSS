@@ -44,9 +44,11 @@ export const SONGS: Song[] = [
     beatType: 4,
     sharps: 0,
     tip: "Solo usa tres dedos: pulgar en DO, índice en RE y corazón en MI. Es la mejor primera canción.",
+    // Fully fingered: everything sits under one hand in the five-finger position,
+    // so the digits are unambiguous (1 = thumb on DO … 5 = little finger on SOL).
     right:
-      "E4 D4 C4 D4 | E4 E4 E4:2 | D4 D4 D4:2 | E4 G4 G4:2 | " +
-      "E4 D4 C4 D4 | E4 E4 E4 E4 | D4 D4 E4 D4 | C4:4",
+      "E4/3 D4/2 C4/1 D4/2 | E4/3 E4/3 E4/3:2 | D4/2 D4/2 D4/2:2 | E4/3 G4/5 G4/5:2 | " +
+      "E4/3 D4/2 C4/1 D4/2 | E4/3 E4/3 E4/3 E4/3 | D4/2 D4/2 E4/3 D4/2 | C4/1:4",
   },
   {
     id: "ode-to-joy",

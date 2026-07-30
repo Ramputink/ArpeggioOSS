@@ -120,14 +120,26 @@ export class Synth {
    * never mistaken for a note of the piece.
    */
   click(accent = false): void {
+    this.clickAt(this.now, accent);
+  }
+
+  /**
+   * Schedule a click on the audio clock.
+   *
+   * Pitched at 2637 Hz (E7), deliberately **above YIN's 1500 Hz search range**:
+   * with a real piano the click leaves the speaker and comes back through the
+   * microphone, and a click inside the detector's range would be transcribed as a
+   * note the learner never played.
+   */
+  clickAt(at: number, accent = false): void {
     if (!this.ctx || !this.master) return;
-    const t = this.ctx.currentTime;
+    const t = at;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = "square";
-    osc.frequency.value = accent ? 1320 : 880;
+    osc.frequency.value = accent ? 2637 : 1976;
     gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(0.06, t + 0.005);
+    gain.gain.exponentialRampToValueAtTime(accent ? 0.075 : 0.05, t + 0.004);
     gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
     osc.connect(gain).connect(this.master);
     osc.start(t);

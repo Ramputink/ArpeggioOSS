@@ -33,7 +33,13 @@ async function copyBasicPitchModel() {
 }
 
 export const buildOptions = {
-  entryPoints: { app: join(here, "src/main.ts") },
+  // Two entry points: the page, and the worker that runs MOTOR 2 off the main
+  // thread. Both are ESM, so the worker is instantiated with { type: "module" }
+  // and shares esbuild's split chunks with the page.
+  entryPoints: {
+    app: join(here, "src/main.ts"),
+    polyWorker: join(here, "src/polyWorker.ts"),
+  },
   bundle: true,
   format: "esm",
   target: ["es2020", "safari15"],

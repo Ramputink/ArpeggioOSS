@@ -22,4 +22,4 @@ export {
   type SimOptions,
   type ChordOptions,
 } from "./audio.js";
-export { LivePractice } from "./practice.js";
+export { LivePractice, type LivePracticeOptions } from "./practice.js";

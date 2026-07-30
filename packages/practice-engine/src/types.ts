@@ -130,6 +130,16 @@ export interface PlayerEvent {
   timeSec: number;
   /** Timing error in seconds (played - expected); present for correct/early/late. */
   timingErrorSec?: number;
+  /**
+   * Octave displacement on a `wrong` event whose pitch class was right, in
+   * octaves (-1 = an octave too low, +2 = two octaves too high).
+   *
+   * The most common mistake at a real keyboard is the right note in the wrong
+   * octave — a misplaced hand, not a misread note. Reporting it as an
+   * undifferentiated `wrong` tells the learner nothing about what to fix, so the
+   * follower measures it and the UI can say which way to move.
+   */
+  octaveOff?: number;
 }
 
 // ---------------------------------------------------------------------------

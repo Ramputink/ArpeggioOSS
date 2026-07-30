@@ -8,6 +8,7 @@
  *     F#4:0.5        eighth note; duration is in quarter-note beats
  *     Bb3:1.5        dotted quarter
  *     E5:1/3         triplet eighth (fractions keep tuplets exact)
+ *     C4/1           with a finger number (1 = thumb … 5 = little finger)
  *     r:2            rest of 2 beats (rests only advance the clock)
  *     C3+E3+G3:2     chord — notes sharing one onset
  *     |              bar line (validated against the time signature)
@@ -147,15 +148,23 @@ export function parseVoice(source: string, opts: VoiceOptions): ParsedVoice {
     }
     if (pitchPart !== "r") {
       for (const p of pitchPart.split("+")) {
+        // A trailing "/n" is the finger, not part of the pitch: C4/1.
+        const slash = p.indexOf("/");
+        const pitch = slash < 0 ? p : p.slice(0, slash);
+        const finger = slash < 0 ? undefined : Number(p.slice(slash + 1));
+        if (finger !== undefined && !(finger >= 1 && finger <= 5)) {
+          throw new Error(`finger must be 1–5 in token "${token}"`);
+        }
         events.push({
           onset: cursor,
           offset: cursor + duration,
-          pitchMidi: pitchToMidi(p),
+          pitchMidi: pitchToMidi(pitch),
           voice,
           staff,
           hand,
           measure: barIndex + 1,
           position: cursor - barStart,
+          ...(finger !== undefined ? { finger } : {}),
         });
       }
     }

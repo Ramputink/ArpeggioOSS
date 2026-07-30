@@ -81,6 +81,16 @@
     <span id="heroCta" class="hero-cta" aria-hidden="true"></span>
   </button>
 
+  <div class="quickrow">
+    <button id="sessionBtn" class="quick" type="button">
+      <i data-icon="clock" aria-hidden="true"></i><span>Sesión de 10 min</span>
+    </button>
+    <button id="importBtn" class="quick" type="button">
+      <i data-icon="upload" aria-hidden="true"></i><span>Importar partitura</span>
+    </button>
+    <input id="importFile" type="file" accept=".musicxml,.xml,.mxl" class="hidden" />
+  </div>
+
   <div id="songList" class="levels"></div>
 
   <footer class="footer">
@@ -102,6 +112,8 @@
     </div>
     <button id="namesBtn" class="iconbtn iconbtn-text" aria-pressed="true"
             aria-label="Mostrar u ocultar los nombres de las notas">DO</button>
+    <button id="standBtn" class="iconbtn" aria-pressed="false"
+            aria-label="Modo atril: para el móvil apoyado en el piano"></button>
   </header>
 
   <div class="track" role="progressbar" aria-label="Progreso de la pieza"
@@ -116,11 +128,26 @@
       <span id="streakIcon" class="streak-icon" aria-hidden="true"></span>
       <span id="streakCount"></span>
     </div>
+    <p id="rotateHint" class="rotate-hint hidden">Gira el móvil: en horizontal cabe el doble de partitura.</p>
   </div>
 
   <div id="cue" class="cue" aria-live="polite"><span class="cue-text">Preparado</span></div>
 
   <div id="keyboard" class="keyboard"></div>
+
+  <!-- Music-stand mode: three targets big enough to hit without looking, in the
+       corners a hand can reach without leaving the keys. -->
+  <div id="standBar" class="standbar hidden">
+    <button id="standRestart" class="standbtn" type="button">
+      <i data-icon="back" aria-hidden="true"></i><span>Repetir</span>
+    </button>
+    <button id="standLoop" class="standbtn" type="button" aria-pressed="false">
+      <i data-icon="loop" aria-hidden="true"></i><span>Bucle</span>
+    </button>
+    <button id="standStop" class="standbtn" type="button">
+      <i data-icon="close" aria-hidden="true"></i><span>Parar</span>
+    </button>
+  </div>
 </main>
 
 <!-- ===================== Setup sheet ===================== -->
@@ -139,6 +166,15 @@
         <button type="button" data-mode="demo"><i data-icon="ear"></i>Escuchar</button>
       </div>
       <p id="modeHelp" class="hint"></p>
+    </div>
+
+    <div class="field">
+      <span class="flabel">Cómo se corrige</span>
+      <div class="segmented" id="judgeSel" role="group" aria-label="Modo de corrección">
+        <button type="button" data-judge="wait" class="on">Te espera</button>
+        <button type="button" data-judge="tempo">A tempo</button>
+      </div>
+      <p id="judgeHelp" class="hint"></p>
     </div>
 
     <div class="field">
@@ -205,7 +241,20 @@
       <span><b>Vibración</b><small>Un toque corto al acertar o fallar una tecla.</small></span>
       <input type="checkbox" id="optHaptics" class="switch" />
     </label>
+    <label class="row">
+      <span><b>Metrónomo</b><small>Un clic en cada pulso mientras toca la pieza.</small></span>
+      <input type="checkbox" id="optMetronome" class="switch" />
+    </label>
+    <label class="row">
+      <span><b>Vista de página</b><small>Un sistema fijo con el cursor moviéndose, en vez de desplazamiento continuo.</small></span>
+      <input type="checkbox" id="optPageView" class="switch" />
+    </label>
+    <label class="row">
+      <span><b>Modo atril</b><small>Sin teclado en pantalla, partitura grande y botones grandes.</small></span>
+      <input type="checkbox" id="optStand" class="switch" />
+    </label>
 
+    <button id="micCheckBtn" class="btn btn-outline" style="margin-top:14px">Comprobar el micrófono</button>
     <p class="micro" id="aboutLine"></p>
     <button id="resetProgress" class="btn btn-quiet danger">Borrar mi progreso</button>
     <div class="sheet-actions">
@@ -223,6 +272,46 @@
     <div id="achList" class="achlist"></div>
     <div class="sheet-actions">
       <button id="achDone" class="btn btn-primary">Listo</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== Guided session ===================== -->
+<div id="session" class="sheet hidden" role="dialog" aria-modal="true" aria-labelledby="sessionTitle">
+  <div class="sheet-card">
+    <span class="grabber" aria-hidden="true"></span>
+    <h2 id="sessionTitle">Sesión de 10 minutos</h2>
+    <p class="tip">Calentar, arreglar lo que falla y sólo entonces algo nuevo. En ese orden.</p>
+    <div id="sessionList" class="achlist"></div>
+    <div class="sheet-actions">
+      <button id="sessionStart" class="btn btn-primary">Empezar la sesión</button>
+      <button id="sessionCancel" class="btn btn-quiet">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== Microphone check ===================== -->
+<div id="miccheck" class="sheet hidden" role="dialog" aria-modal="true" aria-labelledby="micTitle">
+  <div class="sheet-card">
+    <span class="grabber" aria-hidden="true"></span>
+    <h2 id="micTitle">Comprobar el micrófono</h2>
+    <p class="tip">Apoya el móvil en el atril del piano, a un palmo o dos de las cuerdas.</p>
+
+    <div class="meter" aria-hidden="true"><i id="micLevel"></i></div>
+    <p id="micVerdict" class="hint">Pulsa «Escuchar» y toca cualquier tecla.</p>
+
+    <dl class="stats">
+      <div><dd id="micPitch">—</dd><dt>Te oigo</dt></div>
+      <div><dd id="micFloor">—</dd><dt>Ruido</dt></div>
+      <div><dd id="micLatency">—</dd><dt>Retardo</dt></div>
+    </dl>
+
+    <p id="micTask" class="hint warn hidden"></p>
+
+    <div class="sheet-actions">
+      <button id="micStart" class="btn btn-primary">Escuchar</button>
+      <button id="micFloorBtn" class="btn btn-outline">Medir el ruido de la sala</button>
+      <button id="micDone" class="btn btn-quiet">Cerrar</button>
     </div>
   </div>
 </div>

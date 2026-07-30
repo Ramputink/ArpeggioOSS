@@ -37,6 +37,15 @@ export interface NoteEvent {
   position: number;
   /** True when this event absorbed one or more tied continuation notes. */
   tied?: boolean;
+  /**
+   * Suggested finger, 1 (thumb) to 5 (little finger), when the source provides
+   * one.
+   *
+   * Not decoration: without a finger number "play a G" is ambiguous, and a
+   * beginner who picks the wrong one has to unlearn the fingering before the
+   * passage can ever be played up to speed.
+   */
+  finger?: number;
 }
 
 /** A tempo marking placed on the timeline. */

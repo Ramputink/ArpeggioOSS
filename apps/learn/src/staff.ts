@@ -27,6 +27,8 @@ export interface StaffNote {
   /** Offset in quarter-note beats. */
   offset: number;
   hand: "left" | "right" | "unknown";
+  /** Suggested finger, 1–5, drawn above the staff when present. */
+  finger?: number;
 }
 
 export type Clef = "treble" | "bass";
@@ -42,6 +44,20 @@ export interface StaffOptions {
   clefs: Clef[];
   /** Print the Spanish note name (DO, RE, MI…) under every note. */
   showNames: boolean;
+  /**
+   * Largest staff space (line gap) in pixels. 22 suits a phone held in the hand;
+   * music-stand mode raises it, because at 60 cm from the keyboard the notation
+   * has to be roughly twice the size to be readable at a glance.
+   */
+  maxSpace?: number;
+  /**
+   * `scroll` keeps the playhead fixed and moves the music under it — the right
+   * choice for someone who cannot read yet, because the note to play is always in
+   * the same place. `page` lays out a whole system and moves a cursor across it,
+   * turning like a page: that is how you learn to read *ahead*, which is the
+   * actual skill, and it is what a learner at a real piano expects to see.
+   */
+  layout?: "scroll" | "page";
 }
 
 /** Diatonic index (C-1 = 0) of the bottom line of each clef. */
@@ -196,6 +212,11 @@ export class StaffView {
     this.opts = { ...this.opts, showNames: show };
   }
 
+  /** Change the notation size cap (hand-held vs music stand). */
+  setMaxSpace(maxSpace: number): void {
+    this.opts = { ...this.opts, maxSpace };
+  }
+
   /** Re-read the CSS palette after a theme change. */
   refreshTheme(): void {
     this.readPalette();
@@ -270,7 +291,7 @@ export class StaffView {
     const ABOVE = 3;
     const BELOW = 3.4;
     const bodies = grand ? 13 : 4;
-    const s = clamp((h - 2 * pad) / (bodies + ABOVE + BELOW), 5, 22);
+    const s = clamp((h - 2 * pad) / (bodies + ABOVE + BELOW), 5, this.opts.maxSpace ?? 22);
     // Centre the whole system rather than pinning it to the top: on a tall
     // phone screen a top-anchored staff leaves a dead half-screen underneath.
     const blockTop = Math.max(pad, (h - (bodies + ABOVE + BELOW) * s) / 2);
@@ -304,11 +325,38 @@ export class StaffView {
     // 1.65 staff spaces per shortest note: a head is 1.32 wide, so that leaves a
     // small gap. Tighter and the heads touch; looser and a phone shows less than
     // one beat of music ahead.
-    const pxPerBeat = clamp((1.65 * s) / this.minGap, 46, 200);
+    const scrollPxPerBeat = clamp((1.65 * s) / this.minGap, 46, 200);
 
-    const toX = (beat: number): number => playX + (beat - this.beatNow) * pxPerBeat;
-    const firstBeat = this.beatNow - (playX - gutter) / pxPerBeat;
-    const lastBeat = this.beatNow + (w - playX) / pxPerBeat;
+    const { beatsPerBar, pickupBeats } = this.opts;
+    const firstBoundary = pickupBeats > 0 ? pickupBeats : 0;
+    const paged = this.opts.layout === "page";
+
+    // In page layout the music does not move: whole bars are laid across the
+    // width and a cursor travels over them. The scale is therefore chosen to fit
+    // a whole number of bars, never to cut one in half at the right edge.
+    let pxPerBeat = scrollPxPerBeat;
+    let pageStart = 0;
+    let beatsPerPage = 0;
+    if (paged) {
+      const usable = Math.max(80, w - gutter - 14);
+      const barsPerPage = Math.max(1, Math.floor(usable / (scrollPxPerBeat * beatsPerBar)));
+      beatsPerPage = barsPerPage * beatsPerBar;
+      pxPerBeat = usable / beatsPerPage;
+      pageStart =
+        this.beatNow < firstBoundary
+          ? 0
+          : firstBoundary +
+            Math.floor((this.beatNow - firstBoundary) / beatsPerPage) * beatsPerPage;
+    }
+
+    const toX = (beat: number): number =>
+      paged ? gutter + 7 + (beat - pageStart) * pxPerBeat : playX + (beat - this.beatNow) * pxPerBeat;
+    const firstBeat = paged ? pageStart - firstBoundary : this.beatNow - (playX - gutter) / pxPerBeat;
+    const lastBeat = paged
+      ? pageStart + beatsPerPage
+      : this.beatNow + (w - playX) / pxPerBeat;
+    /** Where the "you are here" line goes. */
+    const cursorX = paged ? toX(this.beatNow) : playX;
 
     // --- staff lines ---
     ctx.strokeStyle = c.line;
@@ -324,8 +372,6 @@ export class StaffView {
     }
 
     // --- bar lines ---
-    const { beatsPerBar, pickupBeats } = this.opts;
-    const firstBoundary = pickupBeats > 0 ? pickupBeats : 0;
     const kStart = Math.floor((firstBeat - firstBoundary) / beatsPerBar) - 1;
     const kEnd = Math.ceil((lastBeat - firstBoundary) / beatsPerBar) + 1;
     ctx.strokeStyle = c.line;
@@ -385,7 +431,7 @@ export class StaffView {
         // Names are centred, so one straddling the gutter would show as a stray
         // half-letter after the gutter is repainted over it. Drop it instead.
         const named = x > gutter + 14 && !chordOnsets.has(Math.round(note.onset * 1e6));
-        this.drawNote(note, top, clef, s, x, li, named, beams.get(note));
+        this.drawNote(note, top, clef, s, x, li, named, x > gutter + 8, beams.get(note));
       }
 
       // Beams last so they sit cleanly over the stems they cap.
@@ -431,8 +477,8 @@ export class StaffView {
     ctx.strokeStyle = grad;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(Math.round(playX) + 0.5, 2);
-    ctx.lineTo(Math.round(playX) + 0.5, h - 2);
+    ctx.moveTo(Math.round(cursorX) + 0.5, 2);
+    ctx.lineTo(Math.round(cursorX) + 0.5, h - 2);
     ctx.stroke();
     ctx.lineWidth = 1;
 
@@ -463,6 +509,7 @@ export class StaffView {
     x: number,
     lane: number,
     withName: boolean,
+    pastGutter: boolean,
     beam?: Beam,
   ): void {
     const { ctx, palette: c } = this;
@@ -553,6 +600,17 @@ export class StaffView {
       ctx.textAlign = "right";
       ctx.textBaseline = "middle";
       ctx.fillText(acc, x - s * 0.95, y);
+    }
+
+    // Fingering goes in a lane ABOVE the staff, which is where engraving puts it
+    // and the only place clear of stems, ledger lines and the note-name lane.
+    if (note.finger !== undefined && pastGutter) {
+      ctx.globalAlpha = state === "done" ? 0.4 : 1;
+      ctx.fillStyle = state === "current" ? c.accent : c.dim;
+      ctx.font = `700 ${(s * 1.05).toFixed(1)}px -apple-system, system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "bottom";
+      ctx.fillText(String(note.finger), x, top - s * 0.6);
     }
 
     // Note name in a dedicated lane below the system. Two guards keep it
