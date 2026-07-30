@@ -79,6 +79,25 @@ export interface MonophonicDetector {
 export interface PolyphonicDetector {
   /** Transcribe a window of audio into note events. May be async (ML model). */
   detect(frames: AudioFrame[]): Promise<DetectedNote[]>;
+  /**
+   * False while the detector cannot answer quickly — a model still downloading,
+   * a backend still starting, a worker that has not proved itself.
+   *
+   * The practice loop is real time and single-flight: awaiting a detector that
+   * is not ready stalls capture, drops frames and leaves the cursor frozen while
+   * the learner plays perfectly good notes into it. So the combiner does not
+   * escalate to a detector that says it is not ready — it stays on MOTOR 1,
+   * which is worse at chords and infinitely better than silence.
+   *
+   * Omitted means "always ready", which is right for a synchronous stub.
+   */
+  readonly ready?: boolean;
+  /**
+   * Start loading, off the critical path. Called once when a microphone session
+   * begins, so the cost is paid during the count-in rather than under the
+   * learner's first chord.
+   */
+  warmUp?(): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------

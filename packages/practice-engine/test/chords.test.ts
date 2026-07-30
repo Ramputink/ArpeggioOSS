@@ -236,3 +236,151 @@ test("two keys that do not land in the same window still make a chord", async ()
   assert.equal(session.follower.state.index, 2, "the chord completed across windows");
   assert.equal(session.follower.state.positionBeats, 2, "now on the G");
 });
+
+// ---------------------------------------------------------------------------
+// The bug that broke the app at a real piano
+// ---------------------------------------------------------------------------
+
+/** A MOTOR 2 that hears nothing — still loading, or simply missing the note. */
+class DeafPoly implements PolyphonicDetector {
+  calls = 0;
+  constructor(readonly ready = true) {}
+  async detect(): Promise<DetectedNote[]> {
+    this.calls++;
+    return [];
+  }
+}
+
+test("escalating to MOTOR 2 may add notes, but never remove them", async () => {
+  // THE bug. Escalation returned MOTOR 2's notes and discarded MOTOR 1's, so
+  // whenever MOTOR 2 had nothing to say the follower got silence — and at a
+  // real piano the cursor sat still while the learner played the right note
+  // over and over, with no way to tell why.
+  const poly = new DeafPoly();
+  const combiner = new Combiner(poly);
+  const result = await combiner.combine(estimate({ midi: 60, probability: 0.9 }), [], {
+    polyphony: true,
+    expectedMidi: [60, 64],
+  });
+  assert.equal(poly.calls, 1, "MOTOR 2 was asked");
+  assert.deepEqual(
+    result.notes.map((n) => n.midi),
+    [60],
+    "and MOTOR 1's note survived it hearing nothing",
+  );
+  assert.equal(result.engine, "mono");
+});
+
+test("a detector that is not ready is never waited on", async () => {
+  // The practice loop is real time and single-flight: awaiting a model that is
+  // still downloading stalls capture, drops frames, and freezes the cursor for
+  // as long as the download takes.
+  const poly = new DeafPoly(false);
+  const combiner = new Combiner(poly);
+  const result = await combiner.combine(estimate({ midi: 60, probability: 0.9 }), [], {
+    polyphony: true,
+    expectedMidi: [60, 64],
+  });
+  assert.equal(poly.calls, 0, "not called at all");
+  assert.deepEqual(
+    result.notes.map((n) => n.midi),
+    [60],
+  );
+});
+
+test("a loud note that matches the score is not mistaken for a smeared chord", async () => {
+  // Rule (d) fires on "loud but not *highly* confident", and a struck piano
+  // string is loud while YIN's voiced probability on it routinely sits under
+  // 0.85 — so a plain single-line melody escalated after three frames and then
+  // fell into the bug above. A pitch that matches what the score is waiting for
+  // is the note, not a suspect read.
+  const poly = new FakePoly([60, 64]);
+  const combiner = new Combiner(poly, { hysteresisFrames: 1 });
+  for (let i = 0; i < 5; i++) {
+    const result = await combiner.combine(
+      estimate({ midi: 60, probability: 0.7, energy: 0.4 }),
+      [],
+      { expectedMidi: [60] },
+    );
+    assert.equal(result.engine, "mono", `frame ${i} stayed on the cheap engine`);
+  }
+  assert.equal(poly.calls, 0, "MOTOR 2 was never needed");
+});
+
+test("a loud, confusing frame that does NOT match the score still escalates", async () => {
+  // The counterpart: suppressing the soft rules on agreement must not disable
+  // them, or a genuine chord smear would never reach MOTOR 2.
+  const poly = new FakePoly([60, 64]);
+  const combiner = new Combiner(poly, { hysteresisFrames: 1, thetaHigh: 0.85 });
+  const result = await combiner.combine(estimate({ midi: 67, probability: 0.7, energy: 0.4 }), [], {
+    expectedMidi: [60],
+  });
+  assert.equal(result.engine, "poly");
+});
+
+// ---------------------------------------------------------------------------
+// Forgiving the microphone what the keyboard is not forgiven
+// ---------------------------------------------------------------------------
+
+test("a microphone octave error counts as the note, and says which octave", async () => {
+  // YIN answers an octave high on a struck string with a strong second partial.
+  // Rejecting that tells the learner they played the wrong note when they did
+  // not — and they have no way to interpret it or fix it.
+  const score = parseMusicXML(FIXTURE);
+  const tolerant = new PracticeSession(score, {
+    poly: new FakePoly([72, 76]),
+    follow: { octaveTolerance: 1, chordFraction: 0.5 },
+  });
+  const events = await tolerant.listen(chordFrames([72, 76], 0));
+  const correct = events.filter((e) => e.kind === "correct");
+  assert.ok(correct.length > 0, "an octave-high DO still satisfies the DO");
+  assert.equal(correct[0].expectedMidi, 60, "credited against the note in the score");
+  assert.equal(correct[0].playedMidi, 72, "while reporting what was actually heard");
+  assert.equal(correct[0].octaveOff, 1, "and by how much");
+});
+
+test("without the tolerance an octave error is still a wrong note", async () => {
+  // The on-screen keyboard reports its own pitch, so an octave error there is
+  // genuinely the learner's — and telling them is the whole point.
+  const score = parseMusicXML(FIXTURE);
+  const strict = new PracticeSession(score, { poly: new FakePoly([72]) });
+  const events = await strict.listen(chordFrames([72], 0));
+  assert.ok(events.some((e) => e.kind === "wrong" && e.octaveOff === 1));
+  assert.equal(strict.follower.state.index, 0, "and the cursor holds");
+});
+
+test("a relaxed chord fraction lets a half-heard chord advance", async () => {
+  // Requiring every tone requires the transcription to be perfect, and the
+  // transcription is exactly the part that is not trusted yet.
+  const score = parseMusicXML(FIXTURE);
+  const session = new PracticeSession(score, {
+    poly: new FakePoly([60]),
+    follow: { chordFraction: 0.5 },
+  });
+  await session.listen(chordFrames([60], 0));
+  assert.equal(session.follower.state.positionBeats, 2, "one of two tones was enough");
+});
+
+test("a real note into a two-hand piece is credited even if MOTOR 2 is dead", async () => {
+  // The user story, end to end. A learner opens a piece that has a left hand,
+  // plays a clean DO4 on a real piano, and MOTOR 2 contributes nothing —
+  // because the model is still downloading, or the worker never answers, or the
+  // transcription simply misses it.
+  //
+  // Before the fix the score's polyphony escalated on the first frame, MOTOR 2's
+  // empty answer replaced MOTOR 1's perfectly good DO4, and the follower saw
+  // silence: the cursor never moved, and the app looked broken in a way no
+  // learner could diagnose.
+  const score = parseMusicXML(FIXTURE);
+  const session = new PracticeSession(score, {
+    poly: new DeafPoly(),
+    follow: { chordFraction: 0.5 },
+  });
+
+  const events = await session.listen(chordFrames([60], 0));
+  assert.ok(
+    events.some((e) => e.kind === "correct" && e.playedMidi === 60),
+    "the note the learner actually played is credited",
+  );
+  assert.equal(session.follower.state.positionBeats, 2, "and the cursor moves on");
+});

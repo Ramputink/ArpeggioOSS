@@ -35,17 +35,30 @@ export interface WorkerPolyOptions {
 }
 
 /**
- * Time budget for a worker reply. The first request also covers the model
- * download and the backend starting up; later ones describe audio that is only
- * useful while it is fresh.
+ * Time budget for a worker reply.
+ *
+ * The first request still pays for the model download and the backend starting
+ * up — but it now happens during {@link WorkerPolyDetector.warmUp}, before the
+ * learner plays anything, so nothing is waiting on it. During practice a reply
+ * slower than a couple of seconds is useless anyway: the note it describes is
+ * long gone.
  */
-const FIRST_BUDGET_MS = 15000;
+const FIRST_BUDGET_MS = 20000;
 const LATE_BUDGET_MS = 2500;
+
+/** A second of silence at the microphone's usual rate, to force a first inference. */
+const WARMUP_SAMPLE_RATE = 44100;
+const WARMUP_FRAMES = 4;
+const WARMUP_FRAME_SAMPLES = 2048;
 
 export class WorkerPolyDetector implements PolyphonicDetector {
   private worker: Worker | null = null;
   /** Set once the worker has answered at least one request. */
   private answered = false;
+  /** Set once a real inference has completed, by either path. */
+  private warm = false;
+  /** The warm-up in flight, so it is only ever started once. */
+  private warming: Promise<void> | null = null;
   /** Set once the worker path is known to be unusable. */
   private fallback: PolyphonicDetector | null = null;
   private nextId = 1;
@@ -75,6 +88,47 @@ export class WorkerPolyDetector implements PolyphonicDetector {
   /** True while inference is running off the main thread. */
   get offThread(): boolean {
     return this.worker !== null && this.fallback === null;
+  }
+
+  /**
+   * False until a real inference has completed once.
+   *
+   * The combiner reads this and simply does not escalate while it is false, so
+   * a model that is still downloading — or a worker that turns out never to
+   * answer — costs the practice loop nothing at all. It stays on MOTOR 1, which
+   * cannot hear chords but can hear the note the learner just played.
+   */
+  get ready(): boolean {
+    return this.warm;
+  }
+
+  /**
+   * Load the model and run one inference on silence.
+   *
+   * Called when a microphone session starts, so the whole cost lands during the
+   * count-in instead of under the learner's first chord. Never throws: a warm-up
+   * that fails simply leaves `ready` false for ever, and practice continues on
+   * MOTOR 1.
+   */
+  warmUp(): Promise<void> {
+    if (this.warming) return this.warming;
+    this.warming = (async () => {
+      const silence: AudioFrame[] = Array.from({ length: WARMUP_FRAMES }, (_, i) => ({
+        samples: new Float32Array(WARMUP_FRAME_SAMPLES),
+        sampleRate: WARMUP_SAMPLE_RATE,
+        timeSec: (i * WARMUP_FRAME_SAMPLES) / WARMUP_SAMPLE_RATE,
+      }));
+      try {
+        // Twice: the first attempt may discover that the worker is unusable and
+        // switch to the in-page detector, and it is the surviving path that has
+        // to be warm — not the one that just failed.
+        await this.run(silence);
+        if (!this.warm) await this.run(silence);
+      } catch {
+        // Left cold on purpose: see the doc comment.
+      }
+    })();
+    return this.warming;
   }
 
   async detect(frames: AudioFrame[]): Promise<DetectedNote[]> {
@@ -139,10 +193,12 @@ export class WorkerPolyDetector implements PolyphonicDetector {
           });
         });
         this.answered = true;
+        this.warm = true;
         return notes;
       } catch {
         this.pending.delete(id);
         await this.degrade("worker inference unavailable");
+        this.warm = false;
         // Drop this window rather than re-running it in-page: by the time the
         // fallback has loaded, the audio it describes is stale, and the follower
         // simply does not advance on a window it never hears about.
@@ -150,7 +206,9 @@ export class WorkerPolyDetector implements PolyphonicDetector {
       }
     }
     const local = await this.ensureFallback();
-    return local.detect(frames);
+    const notes = await local.detect(frames);
+    this.warm = true;
+    return notes;
   }
 
   private onMessage(message: PolyResponse): void {

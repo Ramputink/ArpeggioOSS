@@ -118,7 +118,57 @@ In **a-tempo** mode none of this applies: `ATempoJudge` gives every expected not
 its own deadline and grades each independently, so two notes of a chord are simply
 two slots due at the same instant.
 
-## The bug this review found
+## The invariant, and the bug that proved it was needed
+
+**Escalating to MOTOR 2 may add notes. It may never remove them.**
+
+That was not true, and it broke the app at a real piano. `Combiner.combine`
+returned MOTOR 2's notes and discarded MOTOR 1's estimate, so any time MOTOR 2
+had nothing to say — model still downloading, worker not answering, inference
+simply missing the note — the follower received **silence**. The cursor sat
+still while the learner played the right note over and over.
+
+Two things turned that from rare into constant:
+
+- **rule (a)** escalates on the first frame of any two-hand piece, so it was hit
+  before a single note was played;
+- **rule (d)** fires on "loud but not _highly_ confident", and a struck piano
+  string is loud while YIN's voiced probability on it routinely sits below 0.85
+  — so even a single-line melody escalated after three frames and vanished into
+  the same hole.
+
+Three fixes, each with a test that fails without it:
+
+1. an empty MOTOR 2 answer falls through to MOTOR 1 rather than replacing it;
+2. a detector whose `ready` is false is never awaited — the practice loop is
+   real time and single-flight, so waiting on a downloading model stalls capture
+   and freezes the cursor. It stays on MOTOR 1, which cannot hear chords and can
+   hear the note that was just played;
+3. the soft rules (b)–(d) are suppressed when the mono pitch **matches what the
+   score expects**. A pitch the score is waiting for is the note, not a suspect
+   read, and escalating on it can only lose it.
+
+MOTOR 2 is also warmed up when the session starts — one inference on silence,
+during the count-in — so the model download is never paid for under the
+learner's first chord.
+
+## What the microphone is forgiven
+
+Two tolerances that apply to microphone input and to nothing else. Both are
+trades, and both are made because the part being forgiven is _the detector_, not
+the learner:
+
+|                    | Microphone                                             | On-screen keyboard                         |
+| ------------------ | ------------------------------------------------------ | ------------------------------------------ |
+| Octave error       | ±1 octave still counts, and the event says by how much | exact — a tapped key reports its own pitch |
+| Chord tones needed | half                                                   | every one                                  |
+
+The octave one matters most. YIN estimates a fundamental by autocorrelation, and
+a struck string with a strong second partial is the textbook case where it
+answers an octave high. Rejecting that tells the learner they played the wrong
+note when they did not, and there is nothing they can do about it.
+
+## The bug an earlier review found
 
 A-tempo mode over the microphone judged **nothing**. `Runner` was ignoring the
 engine's callbacks in a-tempo mode — correctly, since the waiting follower's

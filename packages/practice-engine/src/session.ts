@@ -24,7 +24,12 @@ import {
   type ExpectedContext,
   type YinOptions,
 } from "./detection/index.js";
-import { FollowYouFollower, expectedNotesFromScore, groupChords } from "./follower/index.js";
+import {
+  FollowYouFollower,
+  expectedNotesFromScore,
+  groupChords,
+  type FollowYouOptions,
+} from "./follower/index.js";
 import { StudentModel, ThresholdCalibrator, type MeasureDifficulty } from "./feedback/index.js";
 import type {
   AudioFrame,
@@ -44,6 +49,11 @@ export interface SessionOptions {
   thresholds?: Thresholds;
   /** MOTOR 1 (YIN) tuning. */
   yin?: YinOptions;
+  /**
+   * Score-follower tuning. The microphone needs a more forgiving follower than a
+   * tapped keyboard does — see `FollowYouOptions.octaveTolerance`.
+   */
+  follow?: FollowYouOptions;
   /**
    * The discrete notes heard in each window, before the follower judges them.
    *
@@ -85,7 +95,7 @@ export class PracticeSession {
     const poly = opts.poly ?? new StubPolyphonicDetector();
     this.yin = new YinDetector(opts.yin);
     this.combiner = new Combiner(poly, { thresholds: opts.thresholds });
-    this.follower = new FollowYouFollower(score);
+    this.follower = new FollowYouFollower(score, opts.follow ?? {});
     this.student = new StudentModel();
     this.calibrator = new ThresholdCalibrator(opts.thresholds);
 

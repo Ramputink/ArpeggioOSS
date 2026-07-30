@@ -13,7 +13,7 @@
  * so listen calls never overlap (see the serialization note below).
  */
 import { PracticeSession, expectedNotesFromScore } from "@arpeggio/practice-engine";
-import type { DetectedNote, PolyphonicDetector } from "@arpeggio/practice-engine";
+import type { DetectedNote, FollowYouOptions, PolyphonicDetector } from "@arpeggio/practice-engine";
 import type { Score } from "@arpeggio/musicxml-parser";
 
 import type { AudioFrame, FrameSource, PlayerEvent, PracticeCallbacks } from "./contracts.js";
@@ -42,9 +42,12 @@ export interface LivePracticeOptions {
   windowFrames?: number;
   /**
    * The notes heard in each window, before the session's waiting follower judges
-   * them. Needed by a caller that grades against a clock instead.
+   * them. Needed by a caller that grades against a clock instead — and by any UI
+   * that wants to show the learner what the microphone is actually hearing.
    */
   onDetections?: (notes: DetectedNote[]) => void;
+  /** Score-follower tuning; the microphone wants a more forgiving one. */
+  follow?: FollowYouOptions;
 }
 
 export class LivePractice {
@@ -80,6 +83,7 @@ export class LivePractice {
     this.session = new PracticeSession(score, {
       ...(poly ? { poly } : {}),
       ...(opts.onDetections ? { onDetections: opts.onDetections } : {}),
+      ...(opts.follow ? { follow: opts.follow } : {}),
     });
     this.total = expectedNotesFromScore(score).length;
     this.callbacks = callbacks;

@@ -21,6 +21,28 @@
  * escalates immediately without waiting.
  *
  * Confidences are fused with the mono/poly weights from {@link Thresholds}.
+ *
+ * ---------------------------------------------------------------------------
+ * THE ONE INVARIANT: **escalating may add notes, never remove them.**
+ *
+ * This was broken, and it broke the whole product at a real piano. Escalating
+ * returned MOTOR 2's notes and discarded MOTOR 1's estimate — so whenever
+ * MOTOR 2 had nothing to say (model still downloading, worker not answering,
+ * inference simply missing the note) the follower received *silence*, and the
+ * cursor sat still while the learner played the right note over and over.
+ *
+ * Two things made that fire constantly rather than rarely:
+ *
+ *  - rule (a) escalates on the first frame of any two-hand piece, so a learner
+ *    opening a piece with a left hand hit it before playing a single note;
+ *  - rule (d) fires on "loud but not *highly* confident", and a real piano note
+ *    is loud while YIN's voiced probability on a struck string with strong
+ *    partials routinely sits under 0.85 — so even a single-line melody escalated
+ *    after three frames and then vanished into the same hole.
+ *
+ * Both are fixed below: MOTOR 1's read survives an empty MOTOR 2, a detector
+ * that is not ready is not waited on, and a mono pitch that *matches the score*
+ * is never treated as a suspect read.
  */
 import type {
   AudioFrame,
@@ -106,7 +128,12 @@ export class Combiner {
     const lowConfidence = estimate.probability < thresholds.thetaLow; // rule (b)
     const disagreement = this.disagrees(estimate, expected); // rule (c)
     const loudButUnstable = this.loudButUnstable(estimate, thresholds); // rule (d)
-    const soft = lowConfidence || disagreement || loudButUnstable;
+    // A mono pitch that matches what the score expects here is not a smeared
+    // chord and not a bad read — it is the note. Escalating on it can only lose
+    // it, and at a real piano it was firing on almost every frame.
+    const soft = this.agrees(estimate, expected)
+      ? false
+      : lowConfidence || disagreement || loudButUnstable;
 
     // --- apply temporal hysteresis ------------------------------------------
     if (structural) {
@@ -135,13 +162,21 @@ export class Combiner {
     }
 
     // --- produce the result for the settled decision ------------------------
-    if (this.decision === "poly") {
+    // A detector that is not ready is not waited on: the practice loop is real
+    // time and single-flight, so awaiting a model that is still downloading
+    // stalls capture and freezes the cursor.
+    if (this.decision === "poly" && this.poly.ready !== false) {
       const polyNotes = await this.poly.detect(frames);
-      return {
-        notes: polyNotes,
-        engine: "poly",
-        confidence: this.fuseConfidence(estimate, polyNotes, thresholds),
-      };
+      if (polyNotes.length > 0) {
+        return {
+          notes: polyNotes,
+          engine: "poly",
+          confidence: this.fuseConfidence(estimate, polyNotes, thresholds),
+        };
+      }
+      // MOTOR 2 heard nothing. That is not evidence of silence — it is the
+      // absence of evidence — so MOTOR 1's read stands rather than being
+      // thrown away. See THE ONE INVARIANT at the top of this file.
     }
     return this.monoResult(estimate);
   }
@@ -162,6 +197,14 @@ export class Combiner {
     if (estimate.midi === null) return false; // unvoiced is handled by rule (b)
     const m = estimate.midi;
     return !expectedMidi.some((e) => Math.abs(e - m) <= this.pitchTolerance);
+  }
+
+  /** Mono has a pitch and it is one the score is waiting for. */
+  private agrees(estimate: PitchEstimate, expected: ExpectedContext): boolean {
+    const expectedMidi = expected.expectedMidi;
+    if (!expectedMidi || expectedMidi.length === 0 || estimate.midi === null) return false;
+    const m = estimate.midi;
+    return expectedMidi.some((e) => Math.abs(e - m) <= this.pitchTolerance);
   }
 
   /** Rule (d): loud energy but the mono pitch isn't *high*-confidence.

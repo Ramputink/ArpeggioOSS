@@ -59,6 +59,15 @@ export interface RunnerHooks {
   onJudge(event: PlayerEvent): void;
   onStatus(text: string): void;
   onFinish(summary: RunSummary): void;
+  /**
+   * Every pitch the microphone heard in a window, judged or not.
+   *
+   * The single most useful thing the app can show at a real piano. Without it,
+   * "it isn't recognising my DO4" and "it is hearing DO5" and "it is hearing
+   * nothing at all" look identical to the learner — and they need completely
+   * different fixes.
+   */
+  onHeard?(midis: number[]): void;
 }
 
 export interface RunnerOptions {
@@ -94,6 +103,30 @@ const RESYNC_MIN_JUMP = 3;
 
 /** Lead-in before scheduled playback, long enough to survive a slow first frame. */
 const SCHEDULE_LEAD_SEC = 0.35;
+
+/**
+ * Octaves either side of an expected pitch that a *microphone* detection may be
+ * off by and still count.
+ *
+ * YIN estimates a fundamental by autocorrelation, and a struck piano string with
+ * a strong second partial is the textbook case where it answers an octave high.
+ * Rejecting that note tells the learner they played the wrong thing when they
+ * did not, which they have no way to interpret and no way to fix. Zero for the
+ * on-screen keyboard, where a key reports its own pitch and an octave error is
+ * genuinely the learner's.
+ */
+const MIC_OCTAVE_TOLERANCE = 1;
+
+/**
+ * Fraction of a chord's tones a *microphone* run must hear before advancing.
+ *
+ * Half, not all. Requiring every tone requires the transcription to be perfect,
+ * and the transcription is precisely the part of this pipeline that is not
+ * trusted yet; the cost of being wrong is a cursor that never moves and a
+ * learner who cannot tell why. A tapped chord keeps the strict rule, because
+ * there the app knows exactly which keys went down.
+ */
+const MIC_CHORD_FRACTION = 0.5;
 
 export class Runner {
   readonly notes: ExpectedNote[];
@@ -403,6 +436,10 @@ export class Runner {
         modelUrl: this.opts.modelUrl,
         workerUrl: this.opts.workerUrl,
       });
+      // Load it now, not under the learner's first chord. Deliberately not
+      // awaited: the session starts on MOTOR 1 either way, and the combiner
+      // will not escalate until the detector reports itself ready.
+      void this.poly.warmUp();
     }
 
     this.live = new LivePractice(
@@ -426,18 +463,22 @@ export class Runner {
         // A monophonic line halves its windowing latency at 2 frames; a chord
         // needs the wider window for Basic Pitch to have something to work with.
         windowFrames: chords ? 4 : 2,
-        // A-tempo grading needs the notes themselves, not the waiting follower's
-        // verdict on them — without this the clock would run while every note
-        // played into the microphone was discarded, and the whole piece would be
-        // scored as missed.
-        ...(this.opts.aTempo
-          ? {
-              onDetections: (notes: DetectedNote[]) => {
-                if (this.paused) return;
-                this.handleEvents(this.judgeDetections(notes));
-              },
-            }
-          : {}),
+        // The microphone is forgiven what the keyboard is not: see the two
+        // constants at the top of this file for why each one is a trade rather
+        // than a slackening of standards.
+        follow: {
+          octaveTolerance: MIC_OCTAVE_TOLERANCE,
+          ...(chords ? { chordFraction: MIC_CHORD_FRACTION } : {}),
+        },
+        onDetections: (notes: DetectedNote[]) => {
+          if (this.paused) return;
+          this.opts.hooks.onHeard?.(notes.map((n) => n.midi));
+          // A-tempo grading needs the notes themselves, not the waiting
+          // follower's verdict on them — without this the clock would run while
+          // every note played into the microphone was discarded, and the whole
+          // piece would be scored as missed.
+          if (this.judge) this.handleEvents(this.judgeDetections(notes));
+        },
       },
     );
 

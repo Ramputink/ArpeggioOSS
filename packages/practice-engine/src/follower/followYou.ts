@@ -34,6 +34,21 @@ export interface FollowYouOptions {
   hesitationWaitSec?: number;
   /** Timing tolerance forwarded to {@link classifyError}. Default 0.15 s. */
   timingToleranceSec?: number;
+  /**
+   * Octaves either side of an expected pitch that still count as that pitch.
+   * 0 (default) means exact.
+   *
+   * This exists for the microphone, not for the learner. YIN estimates a
+   * fundamental by autocorrelation, and a struck piano string with a strong
+   * second partial is the textbook case where it answers an octave high — so
+   * insisting on the exact MIDI number makes the app reject a note that was
+   * played perfectly, which the learner has no way to interpret or fix.
+   *
+   * Deliberately left at 0 for the on-screen keyboard: a tapped key reports its
+   * own pitch, so an octave error there is genuinely the learner's, and telling
+   * them is the whole point.
+   */
+  octaveTolerance?: number;
 }
 
 /** A `Score` or an already-flattened expectation list. */
@@ -56,6 +71,7 @@ export class FollowYouFollower {
   private readonly chordFraction: number;
   private readonly hesitationWaitSec: number;
   private readonly timingToleranceSec: number;
+  private readonly octaveTolerance: number;
 
   /** Index of the chord group the cursor is currently waiting on. */
   private groupIndex = 0;
@@ -82,6 +98,7 @@ export class FollowYouFollower {
     this.chordFraction = opts.chordFraction ?? 1;
     this.hesitationWaitSec = opts.hesitationWaitSec ?? 2;
     this.timingToleranceSec = opts.timingToleranceSec ?? 0.15;
+    this.octaveTolerance = Math.max(0, opts.octaveTolerance ?? 0);
 
     const first = this.groups[0];
     this.state = {
@@ -111,26 +128,33 @@ export class FollowYouFollower {
     const atBeat = group[0].onset;
     const events: PlayerEvent[] = [];
 
-    const isExpectedTone = group.some((g) => g.midi === note.midi);
+    // Which expected tone this detection satisfies, if any. Exactly the played
+    // pitch normally; within `octaveTolerance` octaves of it when the input is a
+    // microphone and the octave cannot be trusted.
+    const tone = this.matchTone(group, note.midi);
 
-    if (isExpectedTone) {
-      if (this.matched.has(note.midi)) {
+    if (tone !== undefined) {
+      if (this.matched.has(tone)) {
         // Already counted this tone for the current chord — ignore the repeat.
         return events;
       }
-      this.matched.add(note.midi);
+      this.matched.add(tone);
       this.lastActivitySec = note.onsetSec;
 
       // Rhythm-tolerant: no timing error is asserted, so this reads `correct`.
-      const kind = classifyError(note.midi, note.midi, undefined, {
+      const kind = classifyError(tone, tone, undefined, {
         timingToleranceSec: this.timingToleranceSec,
       });
+      const octaveOff = tone === note.midi ? undefined : (note.midi - tone) / 12;
       events.push({
         kind,
-        expectedMidi: note.midi,
+        expectedMidi: tone,
         playedMidi: note.midi,
         atBeat,
         timeSec: note.onsetSec,
+        // Carried even on a correct note so the UI can mention the octave
+        // without treating the note as wrong.
+        ...(octaveOff !== undefined ? { octaveOff } : {}),
       });
 
       const required = Math.max(1, Math.ceil(group.length * this.chordFraction));
@@ -194,6 +218,28 @@ export class FollowYouFollower {
         timeSec: nowSec,
       },
     ];
+  }
+
+  /**
+   * The expected tone a detection satisfies, or undefined.
+   *
+   * Exact match first, always: when the played pitch is literally one of the
+   * expected ones, that is the tone, even if another expected tone is an octave
+   * away and would also qualify.
+   */
+  private matchTone(group: ExpectedNote[], playedMidi: number): number | undefined {
+    if (group.some((g) => g.midi === playedMidi)) return playedMidi;
+    if (this.octaveTolerance === 0) return undefined;
+    let best: ExpectedNote | undefined;
+    for (const expected of group) {
+      const octaves = (playedMidi - expected.midi) / 12;
+      if (!Number.isInteger(octaves) || Math.abs(octaves) > this.octaveTolerance) continue;
+      if (this.matched.has(expected.midi)) continue;
+      if (best === undefined || Math.abs(octaves) < Math.abs((playedMidi - best.midi) / 12)) {
+        best = expected;
+      }
+    }
+    return best?.midi;
   }
 
   /** Reset the cursor to the start of the piece. */
