@@ -15,11 +15,7 @@ import { PracticeSession } from "@arpeggio/practice-engine";
 import type { AudioFrame } from "@arpeggio/practice-engine";
 import type { NoteEventTime } from "@spotify/basic-pitch";
 
-import {
-  BasicPitchDetector,
-  resampleLinear,
-  BASIC_PITCH_SAMPLE_RATE,
-} from "../src/basicPitch.js";
+import { BasicPitchDetector, resampleLinear, BASIC_PITCH_SAMPLE_RATE } from "../src/basicPitch.js";
 
 const SR = 48000;
 const FRAME = 2048;
@@ -117,18 +113,22 @@ test("detect surfaces a real chord as simultaneous poly notes with mapped fields
 test("an onset already reported is not emitted again by the next overlapping window", async () => {
   // Window A sees one note; window B's overlapping buffer re-detects that same
   // note AND a new later one. Only the genuinely new onset should come out of B.
-  const scripts: NoteEventTime[][] = [
-    [note(60, 0.05)],
-    [note(60, 0.05), note(64, 0.15)],
-  ];
+  const scripts: NoteEventTime[][] = [[note(60, 0.05)], [note(60, 0.05), note(64, 0.15)]];
   let i = 0;
   const det = new BasicPitchDetector({ transcribe: async () => scripts[i++] });
 
   const a = await det.detect(window(0));
   const b = await det.detect(window(0.2)); // distinct array -> cache miss, new window
 
-  assert.deepEqual(a.map((n) => n.midi), [60]);
-  assert.deepEqual(b.map((n) => n.midi), [64], "the repeated onset is deduped away");
+  assert.deepEqual(
+    a.map((n) => n.midi),
+    [60],
+  );
+  assert.deepEqual(
+    b.map((n) => n.midi),
+    [64],
+    "the repeated onset is deduped away",
+  );
   // Onsets are on the absolute audio clock (buffer start + model-relative time).
   assert.ok(Math.abs(a[0].onsetSec - 0.05) < 1e-6);
 });
@@ -222,6 +222,14 @@ test("a note dropped for low confidence does not suppress a genuine later note",
   const det = new BasicPitchDetector({ minConfidence: 0.5, transcribe: async () => scripts[i++] });
   const a = await det.detect(window(0));
   const b = await det.detect(window((4 * FRAME) / SR));
-  assert.deepEqual(a.map((n) => n.midi), [], "quiet note dropped");
-  assert.deepEqual(b.map((n) => n.midi), [60, 64], "both loud notes emerge, none suppressed");
+  assert.deepEqual(
+    a.map((n) => n.midi),
+    [],
+    "quiet note dropped",
+  );
+  assert.deepEqual(
+    b.map((n) => n.midi),
+    [60, 64],
+    "both loud notes emerge, none suppressed",
+  );
 });

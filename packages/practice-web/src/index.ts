@@ -15,11 +15,5 @@ export type {
   PlayerEvent,
   Score,
 } from "./contracts.js";
-export {
-  MicSource,
-  SimSource,
-  ChordSource,
-  type SimOptions,
-  type ChordOptions,
-} from "./audio.js";
+export { MicSource, SimSource, ChordSource, type SimOptions, type ChordOptions } from "./audio.js";
 export { LivePractice, type LivePracticeOptions } from "./practice.js";

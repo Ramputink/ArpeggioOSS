@@ -31,11 +31,7 @@
  * injectable seam (`opts.transcribe`) so the resampling / buffering / dedup logic
  * can be unit-tested headlessly without loading the ML runtime.
  */
-import type {
-  AudioFrame,
-  DetectedNote,
-  PolyphonicDetector,
-} from "@arpeggio/practice-engine";
+import type { AudioFrame, DetectedNote, PolyphonicDetector } from "@arpeggio/practice-engine";
 import type { NoteEventTime } from "@spotify/basic-pitch";
 
 /** Fixed input sample rate of the Basic Pitch model. */
@@ -253,9 +249,8 @@ export class BasicPitchDetector implements PolyphonicDetector {
 
   /** The real Basic Pitch path (dynamically imported to keep tests light). */
   private async basicPitchTranscribe(mono22k: Float32Array): Promise<NoteEventTime[]> {
-    const { BasicPitch, outputToNotesPoly, noteFramesToTime } = await import(
-      "@spotify/basic-pitch"
-    );
+    const { BasicPitch, outputToNotesPoly, noteFramesToTime } =
+      await import("@spotify/basic-pitch");
     if (!this.enginePromise) {
       this.enginePromise = Promise.resolve(new BasicPitch(this.modelUrl));
     }

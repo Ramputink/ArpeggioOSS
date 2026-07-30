@@ -67,7 +67,10 @@ function draw(size) {
   const s = size / 512; // the SVG is authored on a 512 grid
   const put = (x, y, [r, g, b]) => {
     const i = (y * size + x) * 4;
-    px[i] = r; px[i + 1] = g; px[i + 2] = b; px[i + 3] = 255;
+    px[i] = r;
+    px[i + 1] = g;
+    px[i + 2] = b;
+    px[i + 3] = 255;
   };
   const inRoundRect = (x, y, rx, ry, w, h, r) => {
     if (x < rx || y < ry || x >= rx + w || y >= ry + h) return false;
@@ -93,7 +96,10 @@ function draw(size) {
     }
   }
 
-  const kx = 76 * s, ky = 150 * s, kw = 360 * s, kh = 212 * s;
+  const kx = 76 * s,
+    ky = 150 * s,
+    kw = 360 * s,
+    kh = 212 * s;
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       if (inRoundRect(x, y, kx, ky, kw, kh, 16 * s)) put(x, y, WHITE);

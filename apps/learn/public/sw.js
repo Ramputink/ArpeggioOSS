@@ -18,7 +18,14 @@ const CACHE = "arpeggio-learn-v2";
 const ALWAYS_FRESH = /\/(index\.html|app\.js|styles\.css|manifest\.webmanifest)$|\/$/;
 
 /** Relative so the same worker serves from a domain root or a Pages sub-path. */
-const CORE = ["./", "./index.html", "./styles.css", "./app.js", "./manifest.webmanifest", "./icon.svg"];
+const CORE = [
+  "./",
+  "./index.html",
+  "./styles.css",
+  "./app.js",
+  "./manifest.webmanifest",
+  "./icon.svg",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

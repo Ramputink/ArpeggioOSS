@@ -16,11 +16,7 @@ import type { PlayerEvent, PlayerEventKind } from "../src/types.js";
 // --- helpers ----------------------------------------------------------------
 
 let clock = 0;
-function ev(
-  kind: PlayerEventKind,
-  midi: number,
-  timingErrorSec?: number,
-): PlayerEvent {
+function ev(kind: PlayerEventKind, midi: number, timingErrorSec?: number): PlayerEvent {
   clock += 1;
   return {
     kind,
@@ -117,10 +113,7 @@ test("ThresholdCalibrator: MOTOR 1 often wrong => escalate sooner", () => {
   }
   const t = cal.getThresholds();
   assert.ok(t.thetaLow > DEFAULT_THRESHOLDS.thetaLow, "thetaLow should rise");
-  assert.ok(
-    t.polyWeight > t.monoWeight,
-    "poly should outweigh mono when MOTOR 1 is unreliable",
-  );
+  assert.ok(t.polyWeight > t.monoWeight, "poly should outweigh mono when MOTOR 1 is unreliable");
   // Ranges + normalization intact.
   assert.ok(within01(t.thetaLow));
   assert.ok(within01(t.monoWeight));
@@ -142,10 +135,7 @@ test("ThresholdCalibrator: feeding the opposite moves it back", () => {
   const rightState = cal.getThresholds();
 
   assert.ok(rightState.thetaLow < wrongState.thetaLow, "thetaLow should fall back");
-  assert.ok(
-    rightState.monoWeight > rightState.polyWeight,
-    "mono should regain dominance",
-  );
+  assert.ok(rightState.monoWeight > rightState.polyWeight, "mono should regain dominance");
   assert.ok(within01(rightState.thetaLow));
   assert.ok(Math.abs(rightState.monoWeight + rightState.polyWeight - 1) < 1e-9);
 });

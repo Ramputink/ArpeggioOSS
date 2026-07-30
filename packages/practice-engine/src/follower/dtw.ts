@@ -36,11 +36,7 @@ export interface DtwOptions {
   freeEnd?: boolean;
 }
 
-function localCost(
-  detected: DetectedNote,
-  expected: ExpectedNote,
-  onsetWeight: number,
-): number {
+function localCost(detected: DetectedNote, expected: ExpectedNote, onsetWeight: number): number {
   const pitchCost = Math.abs(detected.midi - expected.midi);
   const onsetCost =
     onsetWeight > 0 ? onsetWeight * Math.abs(detected.onsetSec - expected.onset) : 0;

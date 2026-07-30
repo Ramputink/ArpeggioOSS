@@ -200,9 +200,7 @@ export class Combiner {
     thresholds: Thresholds,
   ): number {
     const polyConf =
-      polyNotes.length > 0
-        ? polyNotes.reduce((s, n) => s + n.confidence, 0) / polyNotes.length
-        : 0;
+      polyNotes.length > 0 ? polyNotes.reduce((s, n) => s + n.confidence, 0) / polyNotes.length : 0;
     const wSum = thresholds.monoWeight + thresholds.polyWeight;
     if (wSum <= 0) return polyConf;
     const fused =

@@ -381,14 +381,17 @@ export class ChordSource implements FrameSource {
     // the detector's rolling ~2 s buffer fills just as it would from a mic.
     const framesPerTick = 4;
     let emitted = 0;
-    this.timer = setInterval(() => {
-      if (!this.running) return;
-      for (let k = 0; k < framesPerTick && emitted < totalFrames; k++, emitted++) {
-        const timeSec = emitted * frameDurSec;
-        onFrame({ samples: this.synthesize(timeSec), sampleRate: this.sampleRate, timeSec });
-      }
-      if (emitted >= totalFrames) this.stop();
-    }, framesPerTick * frameDurSec * 1000);
+    this.timer = setInterval(
+      () => {
+        if (!this.running) return;
+        for (let k = 0; k < framesPerTick && emitted < totalFrames; k++, emitted++) {
+          const timeSec = emitted * frameDurSec;
+          onFrame({ samples: this.synthesize(timeSec), sampleRate: this.sampleRate, timeSec });
+        }
+        if (emitted >= totalFrames) this.stop();
+      },
+      framesPerTick * frameDurSec * 1000,
+    );
   }
 
   /** One frame: the sum of every chord tone, each with decaying harmonics. */

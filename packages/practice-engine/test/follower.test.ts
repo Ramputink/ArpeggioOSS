@@ -107,13 +107,7 @@ test("dtwAlign maps a stream with a spurious note back onto the expected run", (
   const expected = expectedNotesFromScore(score);
 
   // C, D, <spurious high note>, E, F.
-  const detected = [
-    det(60, 0.0),
-    det(62, 0.5),
-    det(96, 0.7),
-    det(64, 1.0),
-    det(65, 1.5),
-  ];
+  const detected = [det(60, 0.0), det(62, 0.5), det(96, 0.7), det(64, 1.0), det(65, 1.5)];
   const mapping = dtwAlign(detected, expected);
 
   // The genuine notes align to their own indices; the spurious note folds onto
@@ -132,10 +126,19 @@ test("dtwAlign maps a stream with a spurious note back onto the expected run", (
 test("DtwFollower reports intermediate positions, not pinned to the end", async () => {
   const { DtwFollower } = await import("../src/follower/dtw.js");
   const exp = [60, 62, 64, 65].map((midi, i) => ({
-    midi, onset: i, offset: i + 1, measure: 1, voice: 1, staff: 1,
+    midi,
+    onset: i,
+    offset: i + 1,
+    measure: 1,
+    voice: 1,
+    staff: 1,
   }));
   const det = (midi: number) => ({
-    midi, onsetSec: 0, offsetSec: null, confidence: 1, engine: "mono" as const,
+    midi,
+    onsetSec: 0,
+    offsetSec: null,
+    confidence: 1,
+    engine: "mono" as const,
   });
   const f = new DtwFollower(exp);
   const i0 = f.onDetected(det(60));

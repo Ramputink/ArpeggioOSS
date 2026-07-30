@@ -52,17 +52,26 @@ function ensureCert() {
   mkdirSync(certDir, { recursive: true });
   const hosts = ["localhost", ...lanAddresses()];
   // subjectAltName is what modern browsers actually check; a bare CN is ignored.
-  const san = hosts
-    .map((h) => (/^\d+\.\d+\.\d+\.\d+$/.test(h) ? `IP:${h}` : `DNS:${h}`))
-    .join(",");
+  const san = hosts.map((h) => (/^\d+\.\d+\.\d+\.\d+$/.test(h) ? `IP:${h}` : `DNS:${h}`)).join(",");
   console.log("generating a self-signed certificate for", hosts.join(", "));
   execFileSync(
     "openssl",
     [
-      "req", "-x509", "-newkey", "rsa:2048", "-nodes",
-      "-keyout", keyPath, "-out", crtPath,
-      "-days", "365", "-subj", "/CN=arpeggio-learn",
-      "-addext", `subjectAltName=${san}`,
+      "req",
+      "-x509",
+      "-newkey",
+      "rsa:2048",
+      "-nodes",
+      "-keyout",
+      keyPath,
+      "-out",
+      crtPath,
+      "-days",
+      "365",
+      "-subj",
+      "/CN=arpeggio-learn",
+      "-addext",
+      `subjectAltName=${san}`,
     ],
     { stdio: "inherit" },
   );
@@ -71,23 +80,21 @@ function ensureCert() {
 const outdir = await buildOnce({ minify: true });
 ensureCert();
 
-createServer(
-  { key: readFileSync(keyPath), cert: readFileSync(crtPath) },
-  (req, res) => {
-    const url = decodeURIComponent((req.url ?? "/").split("?")[0]);
-    // normalize() collapses ".." so a request can never escape dist/.
-    let file = join(outdir, normalize(url));
-    if (!file.startsWith(outdir)) file = outdir;
-    if (!existsSync(file) || statSync(file).isDirectory()) file = join(outdir, "index.html");
-    res.writeHead(200, {
-      "content-type": MIME[extname(file)] ?? "application/octet-stream",
-      "cache-control": "no-cache",
-    });
-    createReadStream(file).pipe(res);
-  },
-).listen(PORT, "0.0.0.0", () => {
+createServer({ key: readFileSync(keyPath), cert: readFileSync(crtPath) }, (req, res) => {
+  const url = decodeURIComponent((req.url ?? "/").split("?")[0]);
+  // normalize() collapses ".." so a request can never escape dist/.
+  let file = join(outdir, normalize(url));
+  if (!file.startsWith(outdir)) file = outdir;
+  if (!existsSync(file) || statSync(file).isDirectory()) file = join(outdir, "index.html");
+  res.writeHead(200, {
+    "content-type": MIME[extname(file)] ?? "application/octet-stream",
+    "cache-control": "no-cache",
+  });
+  createReadStream(file).pipe(res);
+}).listen(PORT, "0.0.0.0", () => {
   console.log("\n  Arpeggio Learn is being served over HTTPS:\n");
   console.log(`    https://localhost:${PORT}`);
-  for (const ip of lanAddresses()) console.log(`    https://${ip}:${PORT}   <- open this on your phone`);
+  for (const ip of lanAddresses())
+    console.log(`    https://${ip}:${PORT}   <- open this on your phone`);
   console.log("\n  The certificate is self-signed: accept the browser warning once.\n");
 });

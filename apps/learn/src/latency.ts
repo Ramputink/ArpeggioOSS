@@ -62,7 +62,8 @@ export class LatencyMeter {
   get stats(): LatencyStats {
     if (this.samplesMs.length === 0) return { samples: 0, p50: 0, p95: 0, worst: 0 };
     const sorted = [...this.samplesMs].sort((a, b) => a - b);
-    const at = (q: number): number => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
+    const at = (q: number): number =>
+      sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
     return {
       samples: sorted.length,
       p50: Math.round(at(0.5)),

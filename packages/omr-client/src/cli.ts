@@ -116,8 +116,9 @@ async function runOmr(args: Args): Promise<void> {
   const form = new FormData();
   form.append("file", new Blob([data]), basename(filePath));
 
-  console.log(`→ POST ${url}  (${(data.length / 1024).toFixed(1)} KiB, `
-    + `preprocess=${args.preprocess})`);
+  console.log(
+    `→ POST ${url}  (${(data.length / 1024).toFixed(1)} KiB, ` + `preprocess=${args.preprocess})`,
+  );
   const started = Date.now();
   const res = await fetch(url, { method: "POST", body: form }).catch((e) =>
     fail(`request failed: ${e.message}`),
@@ -159,9 +160,7 @@ async function runOmr(args: Args): Promise<void> {
 
 async function parseLocal(file: string): Promise<void> {
   const path = resolve(file);
-  const xml = await readFile(path, "utf-8").catch((e) =>
-    fail(`cannot read ${path}: ${e.message}`),
-  );
+  const xml = await readFile(path, "utf-8").catch((e) => fail(`cannot read ${path}: ${e.message}`));
   const score = parseMusicXML(xml);
   console.log(formatReport(qualityReport(score)));
 }

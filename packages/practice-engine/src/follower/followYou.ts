@@ -11,12 +11,7 @@
 
 import type { Score } from "@arpeggio/musicxml-parser";
 
-import type {
-  DetectedNote,
-  ExpectedNote,
-  FollowState,
-  PlayerEvent,
-} from "../types.js";
+import type { DetectedNote, ExpectedNote, FollowState, PlayerEvent } from "../types.js";
 import { classifyError } from "./errors.js";
 import { expectedNotesFromScore, groupChords } from "./expected.js";
 
@@ -243,13 +238,10 @@ export class FollowYouFollower {
  * The nearest candidate wins: against a chord containing both C3 and C5, a
  * played C4 reads as one octave off, not three.
  */
-export function octaveDisplacement(
-  group: ExpectedNote[],
-  playedMidi: number,
-): number | undefined {
+export function octaveDisplacement(group: ExpectedNote[], playedMidi: number): number | undefined {
   let best: number | undefined;
   for (const expected of group) {
-    if (((expected.midi - playedMidi) % 12 + 12) % 12 !== 0) continue;
+    if ((((expected.midi - playedMidi) % 12) + 12) % 12 !== 0) continue;
     const octaves = (playedMidi - expected.midi) / 12;
     if (best === undefined || Math.abs(octaves) < Math.abs(best)) best = octaves;
   }

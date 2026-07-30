@@ -29,7 +29,8 @@ export class Synth {
   async resume(): Promise<void> {
     if (!this.ctx) {
       const Ctor: typeof AudioContext =
-        window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        window.AudioContext ??
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       this.ctx = new Ctor();
       this.master = this.ctx.createGain();
       this.master.gain.value = 0.9;

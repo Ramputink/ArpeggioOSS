@@ -101,9 +101,8 @@ export class ThresholdCalibrator {
       // Confidence-scaled trust. High-certainty pseudo-labels move thresholds; a
       // low-confidence or ambiguous frame barely does (the safety caveat).
       const certainty = obs.highCertainty ? 1 : LOW_CERTAINTY_WEIGHT;
-      const confScale = typeof obs.monoConfidence === "number"
-        ? clamp(obs.monoConfidence, 0, 1)
-        : 1;
+      const confScale =
+        typeof obs.monoConfidence === "number" ? clamp(obs.monoConfidence, 0, 1) : 1;
       const step = BASE_STEP * certainty * confScale;
 
       // direction: +1 when MOTOR 1 is wrong (escalate), -1 when right (trust mono).
@@ -115,7 +114,8 @@ export class ThresholdCalibrator {
     if (obs.playing === false && typeof obs.frameEnergy === "number") {
       // Learn the room's noise floor from silence and track silenceEnergy toward it.
       this.noiseFloor += NOISE_EMA * (obs.frameEnergy - this.noiseFloor);
-      const next = this.thresholds.silenceEnergy +
+      const next =
+        this.thresholds.silenceEnergy +
         NOISE_EMA * (this.noiseFloor - this.thresholds.silenceEnergy);
       this.thresholds.silenceEnergy = clamp(next, SILENCE_MIN, SILENCE_MAX);
     }

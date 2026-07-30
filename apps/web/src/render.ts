@@ -27,12 +27,18 @@ export class PianoRoll implements ScoreRenderer {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("2D canvas context unavailable");
     this.ctx = ctx;
-    window.addEventListener("resize", () => { this.layout(); this.draw(); });
+    window.addEventListener("resize", () => {
+      this.layout();
+      this.draw();
+    });
   }
 
   setScore(score: Score): void {
     this.events = [...score.events].sort((a, b) => a.onset - b.onset || a.pitchMidi - b.pitchMidi);
-    this.beats = Math.max(1, this.events.reduce((m, e) => Math.max(m, e.offset), 0));
+    this.beats = Math.max(
+      1,
+      this.events.reduce((m, e) => Math.max(m, e.offset), 0),
+    );
     const midis = this.events.map((e) => e.pitchMidi);
     // Guard the empty-score case: Math.min/max of [] are ±Infinity, which would
     // make the canvas geometry NaN. Fall back to a sensible middle octave range.
@@ -45,16 +51,27 @@ export class PianoRoll implements ScoreRenderer {
     this.layout();
   }
 
-  setHands(hand: Hand): void { this.hand = hand; this.draw(); }
-  setCursorBeat(beat: number): void { this.cursorBeat = beat; }
-  setActiveIndex(index: number): void { this.activeIndex = index; }
+  setHands(hand: Hand): void {
+    this.hand = hand;
+    this.draw();
+  }
+  setCursorBeat(beat: number): void {
+    this.cursorBeat = beat;
+  }
+  setActiveIndex(index: number): void {
+    this.activeIndex = index;
+  }
 
   /** Beat position of the Nth expected note (for cursor sync). */
   onsetOfIndex(index: number): number {
     return this.events[index]?.onset ?? this.beats;
   }
-  get noteCount(): number { return this.events.length; }
-  get totalBeats(): number { return this.beats; }
+  get noteCount(): number {
+    return this.events.length;
+  }
+  get totalBeats(): number {
+    return this.beats;
+  }
 
   private visible(e: NoteEvent): boolean {
     return this.hand === "both" || e.hand === this.hand;
@@ -77,8 +94,12 @@ export class PianoRoll implements ScoreRenderer {
   private col(name: string): string {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
-  private xOf(beat: number): number { return this.padL + beat * this.pxPerBeat; }
-  private yOf(midi: number): number { return 8 + (this.maxMidi - midi) * this.rowH; }
+  private xOf(beat: number): number {
+    return this.padL + beat * this.pxPerBeat;
+  }
+  private yOf(midi: number): number {
+    return 8 + (this.maxMidi - midi) * this.rowH;
+  }
 
   draw(): void {
     const c = this.ctx;
@@ -89,13 +110,18 @@ export class PianoRoll implements ScoreRenderer {
       const y = this.yOf(m);
       c.fillStyle = this.col("--grid");
       c.fillRect(this.padL, y - this.rowH + 2, this.W - this.padL, this.rowH);
-      c.fillStyle = this.col("--muted"); c.font = "9px sans-serif";
+      c.fillStyle = this.col("--muted");
+      c.font = "9px sans-serif";
       c.fillText("C" + (m / 12 - 1), 4, y);
     }
     // bar lines
-    c.strokeStyle = this.col("--grid"); c.lineWidth = 1;
+    c.strokeStyle = this.col("--grid");
+    c.lineWidth = 1;
     for (let b = 0; b <= this.beats + 1e-3; b += this.beatsPerBar) {
-      c.beginPath(); c.moveTo(this.xOf(b), 4); c.lineTo(this.xOf(b), this.H - 4); c.stroke();
+      c.beginPath();
+      c.moveTo(this.xOf(b), 4);
+      c.lineTo(this.xOf(b), this.H - 4);
+      c.stroke();
     }
     // notes
     for (let i = 0; i < this.events.length; i++) {
@@ -108,24 +134,36 @@ export class PianoRoll implements ScoreRenderer {
       const active = i === this.activeIndex;
       c.fillStyle = e.hand === "left" ? this.col("--lh") : this.col("--rh");
       c.globalAlpha = active ? 1 : sounding ? 0.95 : 0.68;
-      this.roundRect(x, y - this.rowH + 2.5, w, this.rowH - 2, 2.5); c.fill();
+      this.roundRect(x, y - this.rowH + 2.5, w, this.rowH - 2, 2.5);
+      c.fill();
       if (active) {
-        c.globalAlpha = 1; c.strokeStyle = this.col("--accent"); c.lineWidth = 2;
-        this.roundRect(x, y - this.rowH + 2.5, w, this.rowH - 2, 2.5); c.stroke();
+        c.globalAlpha = 1;
+        c.strokeStyle = this.col("--accent");
+        c.lineWidth = 2;
+        this.roundRect(x, y - this.rowH + 2.5, w, this.rowH - 2, 2.5);
+        c.stroke();
       }
     }
     c.globalAlpha = 1;
     // cursor
     const px = this.xOf(this.cursorBeat);
-    c.strokeStyle = this.col("--accent"); c.lineWidth = 2;
-    c.beginPath(); c.moveTo(px, 2); c.lineTo(px, this.H - 2); c.stroke();
+    c.strokeStyle = this.col("--accent");
+    c.lineWidth = 2;
+    c.beginPath();
+    c.moveTo(px, 2);
+    c.lineTo(px, this.H - 2);
+    c.stroke();
   }
 
   private roundRect(x: number, y: number, w: number, h: number, r: number): void {
     const c = this.ctx;
     r = Math.min(r, w / 2, h / 2);
     c.beginPath();
-    c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
-    c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+    c.moveTo(x + r, y);
+    c.arcTo(x + w, y, x + w, y + h, r);
+    c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r);
+    c.arcTo(x, y, x + w, y, r);
+    c.closePath();
   }
 }

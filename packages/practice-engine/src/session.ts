@@ -24,16 +24,8 @@ import {
   type ExpectedContext,
   type YinOptions,
 } from "./detection/index.js";
-import {
-  FollowYouFollower,
-  expectedNotesFromScore,
-  groupChords,
-} from "./follower/index.js";
-import {
-  StudentModel,
-  ThresholdCalibrator,
-  type MeasureDifficulty,
-} from "./feedback/index.js";
+import { FollowYouFollower, expectedNotesFromScore, groupChords } from "./follower/index.js";
+import { StudentModel, ThresholdCalibrator, type MeasureDifficulty } from "./feedback/index.js";
 import type {
   AudioFrame,
   DetectedNote,
@@ -150,10 +142,7 @@ export class PracticeSession {
     if (notes.length > 0) this.opts.onDetections?.(notes);
 
     const lastTime = frames[frames.length - 1].timeSec;
-    const events = [
-      ...this.follower.onDetection(notes),
-      ...this.follower.onTick(lastTime),
-    ];
+    const events = [...this.follower.onDetection(notes), ...this.follower.onTick(lastTime)];
 
     // Student model: one record per judged event, under the measure being played.
     for (const ev of events) {

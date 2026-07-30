@@ -16,12 +16,7 @@ import { PracticeSession, expectedNotesFromScore } from "@arpeggio/practice-engi
 import type { DetectedNote, PolyphonicDetector } from "@arpeggio/practice-engine";
 import type { Score } from "@arpeggio/musicxml-parser";
 
-import type {
-  AudioFrame,
-  FrameSource,
-  PlayerEvent,
-  PracticeCallbacks,
-} from "./contracts.js";
+import type { AudioFrame, FrameSource, PlayerEvent, PracticeCallbacks } from "./contracts.js";
 
 /**
  * Frames per processed window.

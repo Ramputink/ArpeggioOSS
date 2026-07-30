@@ -73,9 +73,7 @@ export function qualityReport(score: Score): QualityReport {
   }
 
   // Out-of-range pitches (octave errors are a classic OMR mistake).
-  const outOfRange = events.filter(
-    (e) => e.pitchMidi < PIANO_MIN || e.pitchMidi > PIANO_MAX,
-  );
+  const outOfRange = events.filter((e) => e.pitchMidi < PIANO_MIN || e.pitchMidi > PIANO_MAX);
   if (outOfRange.length > 0) {
     warnings.push({
       level: "warn",
@@ -103,8 +101,7 @@ export function qualityReport(score: Score): QualityReport {
       level: "info",
       code: "long-tied-note",
       message:
-        `${longTied.length} tied note(s) span > 4 bars of 4/4; ` +
-        `check for an unresolved tie.`,
+        `${longTied.length} tied note(s) span > 4 bars of 4/4; ` + `check for an unresolved tie.`,
     });
   }
 

@@ -19,8 +19,7 @@ import type { AudioFrame, DetectedNote, PolyphonicDetector } from "../types.js";
 
 /** What the stub should return: a fixed list, or a per-call function. */
 export type PolyScript =
-  | DetectedNote[]
-  | ((frames: AudioFrame[]) => DetectedNote[] | Promise<DetectedNote[]>);
+  DetectedNote[] | ((frames: AudioFrame[]) => DetectedNote[] | Promise<DetectedNote[]>);
 
 /** A deterministic, injectable MOTOR 2 double for tests and pipeline wiring. */
 export class StubPolyphonicDetector implements PolyphonicDetector {

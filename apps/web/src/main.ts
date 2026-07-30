@@ -7,7 +7,12 @@
  *   practice      -> MicSource | SimSource --frames--> LivePractice(PracticeSession)
  *                    -> cursor + HUD update from follower/feedback state
  */
-import { parseMusicXML, qualityReport, type Score, type NoteEvent } from "@arpeggio/musicxml-parser";
+import {
+  parseMusicXML,
+  qualityReport,
+  type Score,
+  type NoteEvent,
+} from "@arpeggio/musicxml-parser";
 
 import { BasicPitchDetector } from "@arpeggio/motor2-basicpitch";
 import type { DetectedNote } from "@arpeggio/practice-engine";
@@ -90,9 +95,14 @@ fileInput.addEventListener("change", () => {
   if (f) void handleFile(f);
 });
 ["dragover", "dragenter"].forEach((ev) =>
-  drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("hot"); }));
+  drop.addEventListener(ev, (e) => {
+    e.preventDefault();
+    drop.classList.add("hot");
+  }),
+);
 ["dragleave", "drop"].forEach((ev) =>
-  drop.addEventListener(ev, () => drop.classList.remove("hot")));
+  drop.addEventListener(ev, () => drop.classList.remove("hot")),
+);
 drop.addEventListener("drop", (e) => {
   e.preventDefault();
   const f = (e as DragEvent).dataTransfer?.files?.[0];
@@ -182,7 +192,13 @@ const callbacks = {
     el.textContent = last.kind + (last.playedMidi ? ` (${last.playedMidi})` : "");
     el.className = "v " + (last.kind === "correct" ? "ok" : last.kind === "wrong" ? "bad" : "");
   },
-  onProgress(p: { index: number; total: number; measure: number; done: boolean; positionBeats: number }): void {
+  onProgress(p: {
+    index: number;
+    total: number;
+    measure: number;
+    done: boolean;
+    positionBeats: number;
+  }): void {
     // Drive the cursor by beat position; the renderer highlights whatever notes
     // are sounding there (the follower's index is into the filtered mono line,
     // not the full rendered score, so we don't map it to a rendered note).
@@ -208,7 +224,9 @@ function transportButtons(running: boolean): void {
   $<HTMLButtonElement>("simulate").disabled = running;
   $<HTMLButtonElement>("stop").disabled = !running;
 }
-function setMic(msg: string): void { $("micState").textContent = msg; }
+function setMic(msg: string): void {
+  $("micState").textContent = msg;
+}
 function setEngine(msg: string): void {
   const el = $("hudEngine");
   el.textContent = msg;
@@ -292,7 +310,10 @@ function stopPractice(): void {
 $("listen").addEventListener("click", () => void startPractice(true));
 $("simulate").addEventListener("click", () => void startPractice(false));
 $("chordTest").addEventListener("click", () => void startChordTest());
-$("stop").addEventListener("click", () => { stopPractice(); setMic("stopped"); });
+$("stop").addEventListener("click", () => {
+  stopPractice();
+  setMic("stopped");
+});
 
 $<HTMLInputElement>("chordMode").addEventListener("change", (e) => {
   chordMode = (e.target as HTMLInputElement).checked;
@@ -305,7 +326,11 @@ document.querySelectorAll<HTMLButtonElement>("#hands button").forEach((b) =>
     b.classList.add("on");
     selectedHand = b.dataset.h as "both" | "right" | "left";
     renderer.setHands(selectedHand);
-  }));
+  }),
+);
 
 const tempoInput = $<HTMLInputElement>("tempo");
-tempoInput.addEventListener("input", () => { bpm = +tempoInput.value; $("bpm").textContent = String(bpm); });
+tempoInput.addEventListener("input", () => {
+  bpm = +tempoInput.value;
+  $("bpm").textContent = String(bpm);
+});

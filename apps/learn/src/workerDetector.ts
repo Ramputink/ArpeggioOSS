@@ -60,7 +60,9 @@ export class WorkerPolyDetector implements PolyphonicDetector {
   constructor(private readonly opts: WorkerPolyOptions) {
     try {
       this.worker = new Worker(opts.workerUrl, { type: "module" });
-      this.worker.addEventListener("message", (e: MessageEvent<PolyResponse>) => this.onMessage(e.data));
+      this.worker.addEventListener("message", (e: MessageEvent<PolyResponse>) =>
+        this.onMessage(e.data),
+      );
       // A worker that dies (import failure, out of memory) must not hang the
       // practice loop: reject everything in flight and switch to in-page.
       this.worker.addEventListener("error", () => void this.degrade("worker failed to load"));

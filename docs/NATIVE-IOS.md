@@ -10,27 +10,27 @@ This is the honest version, including the parts that argue against the web.
 The claim is always "lower latency". It is worth being precise about where the
 milliseconds are, because most of them are not where people assume.
 
-| Stage | Web today | Native (AVAudioEngine + Core ML) |
-|---|---|---|
-| Hardware input buffer | Whatever iOS gives Safari; not settable | `preferredIOBufferDuration` down to ~5 ms |
-| Capture callback | `ScriptProcessorNode`, 2048 samples = 46 ms | Render callback, 256 samples = 5.8 ms |
-| Windowing before judging | 2 frames = 93 ms (was 186) | Freely chosen; 3 × 256 = 17 ms |
-| Monophonic pitch (YIN) | ~1 ms in JS | ~0.2 ms |
-| Polyphonic (Basic Pitch) | TF.js, main thread or worker | Core ML on the ANE, ~2–5 ms |
-| **Realistic total** | **~110–200 ms** | **~25–40 ms** |
+| Stage                    | Web today                                   | Native (AVAudioEngine + Core ML)          |
+| ------------------------ | ------------------------------------------- | ----------------------------------------- |
+| Hardware input buffer    | Whatever iOS gives Safari; not settable     | `preferredIOBufferDuration` down to ~5 ms |
+| Capture callback         | `ScriptProcessorNode`, 2048 samples = 46 ms | Render callback, 256 samples = 5.8 ms     |
+| Windowing before judging | 2 frames = 93 ms (was 186)                  | Freely chosen; 3 × 256 = 17 ms            |
+| Monophonic pitch (YIN)   | ~1 ms in JS                                 | ~0.2 ms                                   |
+| Polyphonic (Basic Pitch) | TF.js, main thread or worker                | Core ML on the ANE, ~2–5 ms               |
+| **Realistic total**      | **~110–200 ms**                             | **~25–40 ms**                             |
 
 So the gap is real and it is roughly **an order of magnitude**, and almost all of
 it comes from two things a browser will not give up: the frame size of the capture
 callback, and running inference on the same thread as the UI.
 
-Whether that gap *matters* depends on the mode:
+Whether that gap _matters_ depends on the mode:
 
 - **Wait mode** (the cursor waits for you): 150 ms of lag is invisible. You play,
   the score glides forward; nothing is being timed.
 - **A tempo** (the cursor grades your timing): 150 ms of lag is fatal. The
   tolerance is ±150 ms, so the entire error budget is consumed by the pipeline
   before the learner has done anything wrong. Either the lag is subtracted as a
-  constant — which only works if it is *stable* — or the mode is dishonest.
+  constant — which only works if it is _stable_ — or the mode is dishonest.
 
 That is the decision point, and it is measurable rather than arguable.
 
@@ -51,7 +51,7 @@ Decision rule:
 - **p95 under ~120 ms and spread under ~40 ms** → stay on the web. Compensate the
   constant, ship a-tempo mode, and spend the effort on teaching instead.
 - **p95 over ~200 ms, or a spread over ~80 ms** → a-tempo mode over the microphone
-  is not honest on the web. Then the native path is worth it *for listening*.
+  is not honest on the web. Then the native path is worth it _for listening_.
 
 ## What "going native" would actually cost
 

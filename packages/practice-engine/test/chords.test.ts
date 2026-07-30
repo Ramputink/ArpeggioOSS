@@ -23,12 +23,7 @@ import { parseMusicXML } from "@arpeggio/musicxml-parser";
 
 import { Combiner } from "../src/detection/combiner.js";
 import { PracticeSession } from "../src/session.js";
-import type {
-  AudioFrame,
-  DetectedNote,
-  PitchEstimate,
-  PolyphonicDetector,
-} from "../src/types.js";
+import type { AudioFrame, DetectedNote, PitchEstimate, PolyphonicDetector } from "../src/types.js";
 
 const SR = 44100;
 const FRAME = 2048;
@@ -122,7 +117,10 @@ test("a chord in the score escalates to MOTOR 2 on the very first frame", async 
     expectedMidi: [60, 64],
   });
   assert.equal(result.engine, "poly", "the score is authoritative, no debounce");
-  assert.deepEqual(result.notes.map((n) => n.midi), [60, 64]);
+  assert.deepEqual(
+    result.notes.map((n) => n.midi),
+    [60, 64],
+  );
   assert.equal(poly.calls, 1);
 });
 
@@ -145,22 +143,16 @@ test("a loud frame with only moderate confidence reads as a smeared chord", asyn
   // Loud, pitched, and above thetaLow — so rule (b) misses it — but not
   // confident enough to be a clean single note. That is what two keys at once
   // do to an autocorrelation.
-  const result = await combiner.combine(
-    estimate({ probability: 0.7, energy: 0.4 }),
-    [],
-    {},
-  );
+  const result = await combiner.combine(estimate({ probability: 0.7, energy: 0.4 }), [], {});
   assert.equal(result.engine, "poly");
 });
 
 test("a loud, unambiguous single note stays on the cheap engine", async () => {
   const poly = new FakePoly([60, 64]);
   const combiner = new Combiner(poly, { hysteresisFrames: 1 });
-  const result = await combiner.combine(
-    estimate({ probability: 0.97, energy: 0.4 }),
-    [],
-    { expectedMidi: [60] },
-  );
+  const result = await combiner.combine(estimate({ probability: 0.97, energy: 0.4 }), [], {
+    expectedMidi: [60],
+  });
   assert.equal(result.engine, "mono");
   assert.equal(poly.calls, 0);
 });
@@ -193,7 +185,10 @@ test("a complete chord advances the cursor exactly once", async () => {
 
   const events = await session.listen(chordFrames([60, 64], 0));
   const correct = events.filter((e) => e.kind === "correct").map((e) => e.playedMidi);
-  assert.deepEqual([...correct].sort((a, b) => a! - b!), [60, 64]);
+  assert.deepEqual(
+    [...correct].sort((a, b) => a! - b!),
+    [60, 64],
+  );
   assert.equal(session.follower.state.index, 2, "both tones counted");
   assert.equal(session.follower.state.positionBeats, 2, "now on the G");
 });

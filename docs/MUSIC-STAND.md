@@ -5,16 +5,16 @@ on-screen keyboard, you look at the screen from 30 cm, you have both thumbs
 free. Put the same phone on a piano's music desk and almost every one of those
 assumptions breaks:
 
-| Held in the hand | Propped on the music desk |
-|---|---|
-| 30 cm reading distance | 50–70 cm — everything needs to be roughly twice the size |
-| Both thumbs free | **Hands are on the keys.** Two taps before, one after. That is the entire interaction budget |
-| The on-screen keyboard is the instrument | It is 152 px of dead weight — and a feedback path into the microphone |
-| A short session, screen awake | Twenty minutes, and the screen locks itself |
-| Judging a tap is exact and instant | Judging audio has latency, octave errors, pedal smear and room noise |
+| Held in the hand                         | Propped on the music desk                                                                    |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------- |
+| 30 cm reading distance                   | 50–70 cm — everything needs to be roughly twice the size                                     |
+| Both thumbs free                         | **Hands are on the keys.** Two taps before, one after. That is the entire interaction budget |
+| The on-screen keyboard is the instrument | It is 152 px of dead weight — and a feedback path into the microphone                        |
+| A short session, screen awake            | Twenty minutes, and the screen locks itself                                                  |
+| Judging a tap is exact and instant       | Judging audio has latency, octave errors, pedal smear and room noise                         |
 
 This document is the plan for closing that gap. It is ordered by whether the app
-is *broken*, *uncomfortable*, or *not yet teaching enough* — not by how
+is _broken_, _uncomfortable_, or _not yet teaching enough_ — not by how
 interesting the work is.
 
 Current state, verified in the code rather than assumed:
@@ -28,7 +28,7 @@ Current state, verified in the code rather than assumed:
   and **is not referenced anywhere** — not by `PracticeSession`, not by either app.
 - There is no Wake Lock anywhere.
 - Fingering does not exist in the data model at all.
-- `Runner.press()` calls `synth.noteOn()` *before* checking the mode, so the
+- `Runner.press()` calls `synth.noteOn()` _before_ checking the mode, so the
   on-screen keyboard sounds in microphone mode too.
 
 ---
@@ -48,7 +48,7 @@ is `mic` (and give the space to the staff), and make `Runner.press()` refuse to
 sound the synth outside `keys` mode.
 
 **3. There is no microphone setup step.** Before the first note the learner needs
-to know the app can hear the piano *at all*. A short calibration screen:
+to know the app can hear the piano _at all_. A short calibration screen:
 
 - a live input-level meter, with "too quiet" and "clipping" states;
 - "toca un DO" → we confirm we heard C, and at which octave, which simultaneously
@@ -65,7 +65,7 @@ frame; and for chords, Basic Pitch over a **2-second rolling buffer with
 inference on the main thread**. Nobody has measured what that adds up to on a
 phone. Work: measure it against a click track, set a budget (target under 120 ms
 from key to cursor), then attack it — a 2-frame window for the monophonic path,
-MOTOR 2 moved to a Web Worker, and advancing the cursor on the *onset* rather
+MOTOR 2 moved to a Web Worker, and advancing the cursor on the _onset_ rather
 than on the combiner's settled decision.
 
 **5. Nothing recovers when the player is lost.** Real practice means stopping,
@@ -77,8 +77,8 @@ score and jump the cursor to wherever the player actually is.
 
 **6. Octave errors are reported as plain mistakes.** Playing the right note in the
 wrong octave is the most common beginner error at a real keyboard, and today it
-counts as "wrong" with no explanation. It should say *"correcto, pero una octava
-más abajo"*, and be gradeable separately.
+counts as "wrong" with no explanation. It should say _"correcto, pero una octava
+más abajo"_, and be gradeable separately.
 
 ---
 
@@ -103,14 +103,14 @@ piece: mark bars 5–8, loop them until clean, then take the whole thing 10 %
 faster. `StudentModel.recommendPractice()` already knows which bars are weak — at
 the moment we only print them as a sentence on the result sheet.
 
-**11. Two honest practice modes.** *Espera*: the cursor waits for you (what we
-have, and right for a beginner). *Tempo*: the cursor keeps going and grades you
+**11. Two honest practice modes.** _Espera_: the cursor waits for you (what we
+have, and right for a beginner). _Tempo_: the cursor keeps going and grades you
 against the clock. Only the second one tells the truth about rhythm, and a
 learner needs to graduate to it.
 
 **12. Page view as an alternative to scrolling.** Two to four bars as a static
 system with a moving cursor, turning like a page. Scrolling is the right choice
-for someone who cannot read yet; a fixed system is how you learn to read *ahead*,
+for someone who cannot read yet; a fixed system is how you learn to read _ahead_,
 which is the actual skill.
 
 **13. Let the app play the other hand.** "Left hand only" exists, but the
@@ -131,7 +131,7 @@ which key, as a diagram — shown before the first attempt, not buried in a tip
 string.
 
 **16. Dynamics and pedal.** The canonical model has neither. Needed before levels
-5–6 mean anything musically: the Moonlight opening without *pianissimo* and
+5–6 mean anything musically: the Moonlight opening without _pianissimo_ and
 without the pedal is not the Moonlight opening.
 
 **17. Timing feedback that is already being thrown away.** The follower computes
@@ -167,11 +167,11 @@ real device, which no amount of desk work replaces:
 
 ## Suggested order
 
-| Phase | Work | Why first |
-|---|---|---|
-| A | Wake lock · hide keyboard + mute synth in mic mode · music-stand layout · bigger notation | Cheap, and without them nothing else can be tested at a piano |
-| B | Microphone calibration screen · octave-tolerant feedback | Makes microphone mode diagnosable instead of mysterious |
-| C | Measure latency · MOTOR 2 in a Worker · advance on onset | Decides whether real-time chord following is viable at all |
-| D | Metronome · section loop · tempo ramp · tempo mode | The mechanics that turn playing into practising |
-| E | Fingering in the model and on the staff | The biggest teaching gap |
-| F | DTW re-sync · page view · session structure · MusicXML import | Depth, once the fundamentals hold |
+| Phase | Work                                                                                      | Why first                                                     |
+| ----- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| A     | Wake lock · hide keyboard + mute synth in mic mode · music-stand layout · bigger notation | Cheap, and without them nothing else can be tested at a piano |
+| B     | Microphone calibration screen · octave-tolerant feedback                                  | Makes microphone mode diagnosable instead of mysterious       |
+| C     | Measure latency · MOTOR 2 in a Worker · advance on onset                                  | Decides whether real-time chord following is viable at all    |
+| D     | Metronome · section loop · tempo ramp · tempo mode                                        | The mechanics that turn playing into practising               |
+| E     | Fingering in the model and on the staff                                                   | The biggest teaching gap                                      |
+| F     | DTW re-sync · page view · session structure · MusicXML import                             | Depth, once the fundamentals hold                             |

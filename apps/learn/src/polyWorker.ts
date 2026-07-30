@@ -72,7 +72,11 @@ self.addEventListener("message", (event: MessageEvent<PolyRequest>) => {
     detector
       .detect(frames)
       .then((notes) => {
-        (self as unknown as Worker).postMessage({ type: "result", id, notes } satisfies PolyResultMessage);
+        (self as unknown as Worker).postMessage({
+          type: "result",
+          id,
+          notes,
+        } satisfies PolyResultMessage);
       })
       .catch((err: unknown) => {
         (self as unknown as Worker).postMessage({

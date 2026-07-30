@@ -1,82 +1,104 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Arpeggio — Piano Tutor</title>
-<link rel="stylesheet" href="./styles.css" />
-</head>
-<body>
-<header class="topbar">
-  <h1>🎹 Arpeggio</h1>
-  <span class="tag">piano tutor · listens by microphone</span>
-  <span class="spacer"></span>
-  <span id="backend" class="backend" title="OMR backend">backend: —</span>
-</header>
-
-<main>
-  <!-- Step 1: get a score -->
-  <section id="import" class="panel">
-    <h2>1 · Load a score</h2>
-    <div class="import-grid">
-      <label class="drop" id="drop">
-        <input type="file" id="file" accept=".xml,.musicxml,.mxl,.pdf,.png,.jpg,.jpeg" hidden />
-        <b>Drop or choose a file</b>
-        <span>MusicXML plays instantly · image/PDF is sent to the OMR backend</span>
-      </label>
-      <div class="or">or</div>
-      <button id="sample" class="btn">Load sample (Minuet BWV Anh. 114)</button>
-    </div>
-    <div id="importStatus" class="status"></div>
-  </section>
-
-  <!-- Step 2: score + practice -->
-  <section id="stage" class="panel hidden">
-    <div class="stage-head">
-      <h2 id="pieceTitle">Score</h2>
-      <span id="pieceMeta" class="muted"></span>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Arpeggio — Piano Tutor</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>🎹 Arpeggio</h1>
+      <span class="tag">piano tutor · listens by microphone</span>
       <span class="spacer"></span>
-      <button id="back" class="btn ghost">↩ New score</button>
-    </div>
+      <span id="backend" class="backend" title="OMR backend">backend: —</span>
+    </header>
 
-    <div class="controls">
-      <button id="listen" class="btn primary">🎤 Start practice</button>
-      <button id="simulate" class="btn">▶ Simulate (no mic)</button>
-      <button id="chordTest" class="btn">🎹 Test MOTOR 2 (chord)</button>
-      <button id="stop" class="btn ghost" disabled>■ Stop</button>
-      <label class="chk" title="Detect chords with MOTOR 2 (Basic Pitch). Off = monophonic melody (YIN) only.">
-        <input type="checkbox" id="chordMode" /> Chord mode (MOTOR 2)
-      </label>
-      <span class="seg" id="hands">
-        <button data-h="both" class="on">Both</button>
-        <button data-h="right">Right</button>
-        <button data-h="left">Left</button>
-      </span>
-      <label class="rng">Tempo <input type="range" id="tempo" min="30" max="160" value="90" />
-        <span id="bpm">90</span></label>
-      <span class="spacer"></span>
-      <span id="micState" class="micstate"></span>
-    </div>
+    <main>
+      <!-- Step 1: get a score -->
+      <section id="import" class="panel">
+        <h2>1 · Load a score</h2>
+        <div class="import-grid">
+          <label class="drop" id="drop">
+            <input type="file" id="file" accept=".xml,.musicxml,.mxl,.pdf,.png,.jpg,.jpeg" hidden />
+            <b>Drop or choose a file</b>
+            <span>MusicXML plays instantly · image/PDF is sent to the OMR backend</span>
+          </label>
+          <div class="or">or</div>
+          <button id="sample" class="btn">Load sample (Minuet BWV Anh. 114)</button>
+        </div>
+        <div id="importStatus" class="status"></div>
+      </section>
 
-    <div class="rollwrap"><canvas id="roll"></canvas></div>
+      <!-- Step 2: score + practice -->
+      <section id="stage" class="panel hidden">
+        <div class="stage-head">
+          <h2 id="pieceTitle">Score</h2>
+          <span id="pieceMeta" class="muted"></span>
+          <span class="spacer"></span>
+          <button id="back" class="btn ghost">↩ New score</button>
+        </div>
 
-    <div class="hud">
-      <div class="hud-cell"><div class="k">Progress</div><div class="v" id="hudProgress">0 / 0</div></div>
-      <div class="hud-cell"><div class="k">Measure</div><div class="v" id="hudMeasure">—</div></div>
-      <div class="hud-cell"><div class="k">Accuracy</div><div class="v" id="hudAcc">—</div></div>
-      <div class="hud-cell"><div class="k">Last</div><div class="v" id="hudLast">—</div></div>
-      <div class="hud-cell wide"><div class="k">MOTOR 2 (poly)</div><div class="v" id="hudEngine">—</div></div>
-      <div class="hud-cell wide"><div class="k">Practice next</div><div class="v" id="hudNext">—</div></div>
-    </div>
-  </section>
-</main>
+        <div class="controls">
+          <button id="listen" class="btn primary">🎤 Start practice</button>
+          <button id="simulate" class="btn">▶ Simulate (no mic)</button>
+          <button id="chordTest" class="btn">🎹 Test MOTOR 2 (chord)</button>
+          <button id="stop" class="btn ghost" disabled>■ Stop</button>
+          <label
+            class="chk"
+            title="Detect chords with MOTOR 2 (Basic Pitch). Off = monophonic melody (YIN) only."
+          >
+            <input type="checkbox" id="chordMode" /> Chord mode (MOTOR 2)
+          </label>
+          <span class="seg" id="hands">
+            <button data-h="both" class="on">Both</button>
+            <button data-h="right">Right</button>
+            <button data-h="left">Left</button>
+          </span>
+          <label class="rng"
+            >Tempo <input type="range" id="tempo" min="30" max="160" value="90" />
+            <span id="bpm">90</span></label
+          >
+          <span class="spacer"></span>
+          <span id="micState" class="micstate"></span>
+        </div>
 
-<footer class="foot">
-  Monophonic melody practice runs on-device (YIN). Chord mode transcribes
-  polyphony with MOTOR 2 (Spotify Basic Pitch, in-browser). Microphone needs a
-  secure context (localhost or HTTPS).
-</footer>
+        <div class="rollwrap"><canvas id="roll"></canvas></div>
 
-<script type="module" src="./app.js"></script>
-</body>
+        <div class="hud">
+          <div class="hud-cell">
+            <div class="k">Progress</div>
+            <div class="v" id="hudProgress">0 / 0</div>
+          </div>
+          <div class="hud-cell">
+            <div class="k">Measure</div>
+            <div class="v" id="hudMeasure">—</div>
+          </div>
+          <div class="hud-cell">
+            <div class="k">Accuracy</div>
+            <div class="v" id="hudAcc">—</div>
+          </div>
+          <div class="hud-cell">
+            <div class="k">Last</div>
+            <div class="v" id="hudLast">—</div>
+          </div>
+          <div class="hud-cell wide">
+            <div class="k">MOTOR 2 (poly)</div>
+            <div class="v" id="hudEngine">—</div>
+          </div>
+          <div class="hud-cell wide">
+            <div class="k">Practice next</div>
+            <div class="v" id="hudNext">—</div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      Monophonic melody practice runs on-device (YIN). Chord mode transcribes polyphony with MOTOR 2
+      (Spotify Basic Pitch, in-browser). Microphone needs a secure context (localhost or HTTPS).
+    </footer>
+
+    <script type="module" src="./app.js"></script>
+  </body>
 </html>

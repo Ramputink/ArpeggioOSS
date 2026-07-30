@@ -87,12 +87,7 @@ export class StudentModel {
     }
   }
 
-  private update(
-    map: Map<number, Aggregate>,
-    key: number,
-    event: PlayerEvent,
-    seq: number,
-  ): void {
+  private update(map: Map<number, Aggregate>, key: number, event: PlayerEvent, seq: number): void {
     let agg = map.get(key);
     if (!agg) {
       agg = newAggregate();
@@ -179,9 +174,7 @@ export class StudentModel {
     for (const [measure, agg] of this.byMeasure) {
       rows.push({ measure, difficulty: this.difficultyOf(agg) });
     }
-    rows.sort((a, b) =>
-      b.difficulty - a.difficulty || a.measure - b.measure,
-    );
+    rows.sort((a, b) => b.difficulty - a.difficulty || a.measure - b.measure);
     return rows;
   }
 

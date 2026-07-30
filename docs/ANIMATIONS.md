@@ -1,7 +1,7 @@
 # Animation and progression design — matching (and beating) Simply Piano
 
 What makes Simply Piano feel alive is not one big effect; it is a handful of
-small, *musically motivated* ones that all agree with each other. This document
+small, _musically motivated_ ones that all agree with each other. This document
 records the principles Arpeggio Learn follows, what is implemented today, and
 the ordered plan for the rest.
 
@@ -17,7 +17,7 @@ the ordered plan for the rest.
    waterfall falls at the piece's tempo. Nothing animates at an arbitrary
    duration picked to "feel nice".
 3. **Never animate the thing you must read.** Note heads do not bounce or
-   scale; they change *colour* and gain a halo. The eye needs a stable target.
+   scale; they change _colour_ and gain a halo. The eye needs a stable target.
 4. **60 fps on a five-year-old phone.** One canvas, one `requestAnimationFrame`
    loop, no layout thrash, no per-frame allocation in the hot path. DOM
    animations are reserved for things outside that loop (sheets, confetti).
@@ -26,18 +26,18 @@ the ordered plan for the rest.
 
 ## Implemented
 
-| Effect | Where | Why it earns its place |
-|---|---|---|
-| Fixed playhead, music glides under it | `staff.ts` | The note to play is always in the same place on screen. Position is eased toward the follower's beat (`beatNow += Δ × 0.16`), so a correct note produces a glide, not a jump. |
-| Halo + amber on the current note | `staff.ts` | One unmistakable target, even mid-scroll. |
-| Teal fade for played notes, rose flash for a miss | `staff.ts` | Colour, not motion, so the notation stays readable. |
-| Spark burst on a correct note | `effects.ts` (`Particles`) | Fires from the note head the learner was looking at, inside the same canvas loop, ~12 particles with eased outward motion. |
-| Key glow + hit/miss key flash | `keyboard.ts` + CSS | Answers "which finger, right now" without reading notation. |
-| Musical count-in (3·2·1 at the piece's tempo, with a click) | `main.ts` + `synth.ts` | Establishes the pulse before the first note — the single most useful "animation" for a beginner. |
-| Streak counter with a pop | `main.ts` + CSS | Appears at 3 in a row; resets on a wrong note. |
-| Stars landing one by one, confetti at 3 stars | `effects.ts` + CSS | Reward at the end of the run, off the hot path. |
-| XP bar filling, level badge, achievement toasts | `gamification.ts` + `main.ts` | Progression the learner can see between sessions, not just within one. |
-| Beamed short notes | `staff.ts` | Not an animation, but it is what makes a scrolling bar of sixteenths readable at all. |
+| Effect                                                      | Where                         | Why it earns its place                                                                                                                                                        |
+| ----------------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fixed playhead, music glides under it                       | `staff.ts`                    | The note to play is always in the same place on screen. Position is eased toward the follower's beat (`beatNow += Δ × 0.16`), so a correct note produces a glide, not a jump. |
+| Halo + amber on the current note                            | `staff.ts`                    | One unmistakable target, even mid-scroll.                                                                                                                                     |
+| Teal fade for played notes, rose flash for a miss           | `staff.ts`                    | Colour, not motion, so the notation stays readable.                                                                                                                           |
+| Spark burst on a correct note                               | `effects.ts` (`Particles`)    | Fires from the note head the learner was looking at, inside the same canvas loop, ~12 particles with eased outward motion.                                                    |
+| Key glow + hit/miss key flash                               | `keyboard.ts` + CSS           | Answers "which finger, right now" without reading notation.                                                                                                                   |
+| Musical count-in (3·2·1 at the piece's tempo, with a click) | `main.ts` + `synth.ts`        | Establishes the pulse before the first note — the single most useful "animation" for a beginner.                                                                              |
+| Streak counter with a pop                                   | `main.ts` + CSS               | Appears at 3 in a row; resets on a wrong note.                                                                                                                                |
+| Stars landing one by one, confetti at 3 stars               | `effects.ts` + CSS            | Reward at the end of the run, off the hot path.                                                                                                                               |
+| XP bar filling, level badge, achievement toasts             | `gamification.ts` + `main.ts` | Progression the learner can see between sessions, not just within one.                                                                                                        |
+| Beamed short notes                                          | `staff.ts`                    | Not an animation, but it is what makes a scrolling bar of sixteenths readable at all.                                                                                         |
 
 ## Progression: levels, XP and achievements
 

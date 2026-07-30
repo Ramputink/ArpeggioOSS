@@ -115,16 +115,17 @@ test("one run can unlock several achievements at once", () => {
   const before = stats();
   const after = stats({ notes: 1, songs: ["twinkle"], perfect: 1, bestStreak: 25 });
   const fresh = newlyUnlocked(before, after).map((a) => a.id);
-  assert.deepEqual(
-    [...fresh].sort(),
-    ["first-note", "perfect-1", "song-1", "streak-20"].sort(),
-  );
+  assert.deepEqual([...fresh].sort(), ["first-note", "perfect-1", "song-1", "streak-20"].sort());
 });
 
 test("the classical achievement only counts level 4+ pieces", () => {
   const classical = ACHIEVEMENTS.find((a) => a.id === "classical-3")!;
-  const easy = SONGS.filter((s) => s.level < 4).slice(0, 3).map((s) => s.id);
-  const hard = SONGS.filter((s) => s.level >= 4).slice(0, 3).map((s) => s.id);
+  const easy = SONGS.filter((s) => s.level < 4)
+    .slice(0, 3)
+    .map((s) => s.id);
+  const hard = SONGS.filter((s) => s.level >= 4)
+    .slice(0, 3)
+    .map((s) => s.id);
   assert.equal(classical.progress(stats({ songs: easy })), 0);
   assert.equal(classical.progress(stats({ songs: hard })), 3);
 });
