@@ -36,6 +36,7 @@ import {
 } from "./feedback/index.js";
 import type {
   AudioFrame,
+  DetectedNote,
   DetectionResult,
   ExpectedNote,
   FollowState,
@@ -51,6 +52,15 @@ export interface SessionOptions {
   thresholds?: Thresholds;
   /** MOTOR 1 (YIN) tuning. */
   yin?: YinOptions;
+  /**
+   * The discrete notes heard in each window, before the follower judges them.
+   *
+   * The session's own follower is the waiting kind: it decides what a note means
+   * relative to where it thinks the player is. A caller that grades differently —
+   * against a clock, say — needs the notes themselves, not that follower's
+   * verdict on them, and has no other way to obtain them.
+   */
+  onDetections?: (notes: DetectedNote[]) => void;
 }
 
 /** A snapshot of the session's state for the UI. */
@@ -76,7 +86,10 @@ export class PracticeSession {
   /** Cumulative expected-note count before each chord group. */
   private readonly notesBefore: number[];
 
+  private readonly opts: SessionOptions;
+
   constructor(score: Score, opts: SessionOptions = {}) {
+    this.opts = opts;
     const poly = opts.poly ?? new StubPolyphonicDetector();
     this.yin = new YinDetector(opts.yin);
     this.combiner = new Combiner(poly, { thresholds: opts.thresholds });
@@ -134,6 +147,7 @@ export class PracticeSession {
     // Discrete notes for the follower: MOTOR 2's own notes when polyphonic,
     // otherwise segment the monophonic pitch track into notes.
     const notes = decision.engine === "poly" ? decision.notes : segmentNotes(estimates);
+    if (notes.length > 0) this.opts.onDetections?.(notes);
 
     const lastTime = frames[frames.length - 1].timeSec;
     const events = [

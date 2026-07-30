@@ -312,9 +312,18 @@ export class Runner {
         },
       },
       this.poly ?? undefined,
-      // A monophonic line halves its windowing latency at 2 frames; a chord needs
-      // the wider window for Basic Pitch to have something to work with.
-      { windowFrames: chords ? 4 : 2 },
+      {
+        // A monophonic line halves its windowing latency at 2 frames; a chord
+        // needs the wider window for Basic Pitch to have something to work with.
+        windowFrames: chords ? 4 : 2,
+        // A-tempo grading needs the notes themselves, not the waiting follower's
+        // verdict on them — without this the clock would run while every note
+        // played into the microphone was discarded, and the whole piece would be
+        // scored as missed.
+        ...(this.opts.aTempo
+          ? { onDetections: (notes: DetectedNote[]) => this.handleEvents(this.judgeDetections(notes)) }
+          : {}),
+      },
     );
 
     this.mic = new MicSource();

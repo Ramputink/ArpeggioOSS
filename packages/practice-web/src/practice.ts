@@ -13,7 +13,7 @@
  * so listen calls never overlap (see the serialization note below).
  */
 import { PracticeSession, expectedNotesFromScore } from "@arpeggio/practice-engine";
-import type { PolyphonicDetector } from "@arpeggio/practice-engine";
+import type { DetectedNote, PolyphonicDetector } from "@arpeggio/practice-engine";
 import type { Score } from "@arpeggio/musicxml-parser";
 
 import type {
@@ -45,6 +45,11 @@ export interface LivePracticeOptions {
    * and is the right choice for a monophonic line.
    */
   windowFrames?: number;
+  /**
+   * The notes heard in each window, before the session's waiting follower judges
+   * them. Needed by a caller that grades against a clock instead.
+   */
+  onDetections?: (notes: DetectedNote[]) => void;
 }
 
 export class LivePractice {
@@ -77,7 +82,10 @@ export class LivePractice {
     poly?: PolyphonicDetector,
     opts: LivePracticeOptions = {},
   ) {
-    this.session = new PracticeSession(score, poly ? { poly } : {});
+    this.session = new PracticeSession(score, {
+      ...(poly ? { poly } : {}),
+      ...(opts.onDetections ? { onDetections: opts.onDetections } : {}),
+    });
     this.total = expectedNotesFromScore(score).length;
     this.callbacks = callbacks;
     this.windowFrames = Math.max(1, Math.round(opts.windowFrames ?? WINDOW_FRAMES));
