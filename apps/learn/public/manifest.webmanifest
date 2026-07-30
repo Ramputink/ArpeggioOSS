@@ -1,7 +1,7 @@
 {
   "name": "Arpeggio — aprende piano",
   "short_name": "Arpeggio",
-  "description": "Aprende piano desde cero con partituras animadas y diez canciones para empezar hoy.",
+  "description": "Aprende piano desde cero: partituras animadas, digitación en cada nota y ejercicios de técnica.",
   "lang": "es",
   "start_url": "./",
   "scope": "./",
