@@ -64,10 +64,12 @@ export interface StaffOptions {
 const BOTTOM_LINE: Record<Clef, number> = { treble: 30 /* E4 */, bass: 18 /* G2 */ };
 
 /** Key-signature accidental slots, in the canonical order, per clef. */
+// prettier-ignore
 const SHARP_SLOTS: Record<Clef, number[]> = {
   treble: [38, 35, 39, 36, 33, 37, 34],
   bass: [24, 21, 25, 22, 19, 23, 20],
 };
+// prettier-ignore
 const FLAT_SLOTS: Record<Clef, number[]> = {
   treble: [34, 37, 33, 36, 32, 35, 31],
   bass: [20, 23, 19, 22, 18, 21, 17],
@@ -80,10 +82,12 @@ const LETTER_STEP: Record<string, number> = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5
 /** Spanish note names, indexed like {@link LETTER_STEP}. */
 const SOLFEGE = ["DO", "RE", "MI", "FA", "SOL", "LA", "SI"];
 
+// prettier-ignore
 const SHARP_PCS: Array<[string, -1 | 0 | 1]> = [
   ["C", 0], ["C", 1], ["D", 0], ["D", 1], ["E", 0], ["F", 0],
   ["F", 1], ["G", 0], ["G", 1], ["A", 0], ["A", 1], ["B", 0],
 ];
+// prettier-ignore
 const FLAT_PCS: Array<[string, -1 | 0 | 1]> = [
   ["C", 0], ["D", -1], ["D", 0], ["E", -1], ["E", 0], ["F", 0],
   ["G", -1], ["G", 0], ["A", -1], ["A", 0], ["B", -1], ["B", 0],
@@ -118,6 +122,103 @@ export function noteName(midi: number, sharps: number): string {
   return SOLFEGE[LETTER_STEP[letter]] + (alter === 1 ? "♯" : alter === -1 ? "♭" : "");
 }
 
+// ---------------------------------------------------------------------------
+// System geometry
+// ---------------------------------------------------------------------------
+
+/**
+ * Vertical budget for one system, in staff-gap units: the staff bodies (4 gaps
+ * each, plus a 5-gap corridor between the two staves of a grand staff), the
+ * ledger-line room above, and the ledger + note-name lane below.
+ */
+const ABOVE_GAPS = 3;
+const BELOW_GAPS = 3.4;
+const EDGE_PAD = 8;
+
+export interface LayoutInput {
+  /** Canvas width and height in CSS pixels. */
+  width: number;
+  height: number;
+  /** 1 for a single staff, 2 for a grand staff. */
+  clefCount: number;
+  /** Key signature as a sharp count (negative = flats). */
+  sharps: number;
+  /** Largest staff gap allowed: 22 hand-held, 34 on the music stand. */
+  maxSpace?: number;
+  /** Shortest gap between consecutive onsets, in beats. */
+  minGap: number;
+}
+
+export interface SystemLayout {
+  /** Staff gap (the distance between two staff lines) in pixels. */
+  space: number;
+  /** Y of the top line of each staff, top to bottom. */
+  staffTops: number[];
+  /** Accidentals drawn in the key signature, 0–7. */
+  accidentals: number;
+  /** Horizontal step between key-signature accidentals. */
+  accStep: number;
+  /** X of the first key-signature accidental. */
+  keyX: number;
+  /** X where the music starts, past the clef and key signature. */
+  gutter: number;
+  /** X of the playhead. */
+  playX: number;
+  /** Horizontal scale. */
+  pxPerBeat: number;
+}
+
+/**
+ * Everything about where the system sits, as arithmetic.
+ *
+ * Split out of the draw call because it is the part that is *wrong or right*
+ * rather than merely drawn: a gutter that eats a third of the screen, a staff
+ * pinned to the top of a tall phone, note heads that overlap in a semiquaver
+ * passage. All of that used to be verifiable only by looking at it, on a device,
+ * in a particular orientation.
+ */
+export function systemLayout(input: LayoutInput): SystemLayout {
+  const { width: w, height: h } = input;
+  const grand = input.clefCount > 1;
+  const bodies = grand ? 13 : 4;
+  const total = bodies + ABOVE_GAPS + BELOW_GAPS;
+
+  const space = clamp((h - 2 * EDGE_PAD) / total, 5, input.maxSpace ?? 22);
+  // Centre the whole system rather than pinning it to the top: on a tall phone
+  // screen a top-anchored staff leaves a dead half-screen underneath.
+  const blockTop = Math.max(EDGE_PAD, (h - total * space) / 2);
+  const staffTops = grand
+    ? [blockTop + ABOVE_GAPS * space, blockTop + (ABOVE_GAPS + 9) * space]
+    : [blockTop + ABOVE_GAPS * space];
+
+  // Fixed gutter: clef + key signature, sized from its contents rather than from
+  // a constant. A constant wide enough for four sharps wastes a third of a 393 px
+  // phone screen on a piece in C major; and when four sharps really are needed,
+  // the accidentals are squeezed rather than allowed to push the music off screen.
+  const accidentals = Math.min(Math.abs(input.sharps), 7);
+  const keyX = 8 + 2.5 * space;
+  let accStep = 0.85 * space;
+  let gutter = keyX + accidentals * accStep + (accidentals > 0 ? 10 : 8);
+  const maxGutter = w * 0.34;
+  if (accidentals > 0 && gutter > maxGutter) {
+    accStep = Math.max(0.52 * space, (maxGutter - keyX - 10) / accidentals);
+    gutter = keyX + accidentals * accStep + 10;
+  }
+
+  // Keep a little of what was just played visible to the left of the playhead;
+  // on a narrow phone that collapses to just past the clef.
+  const playX = Math.max(gutter + 1.6 * space + 10, Math.min(w * 0.28, 260));
+
+  // Horizontal scale comes from the SHORTEST note in the piece, so its head
+  // always has room. Fixing pixels-per-beat instead would overlap the heads of a
+  // semiquaver passage on a phone; this makes dense music scroll faster rather
+  // than become illegible, and leaves crotchet pieces spacious. 1.65 staff
+  // spaces per shortest note: a head is 1.32 wide, so that leaves a small gap.
+  const pxPerBeat = clamp((1.65 * space) / Math.max(1e-6, input.minGap), 46, 200);
+
+  return { space, staffTops, accidentals, accStep, keyX, gutter, playX, pxPerBeat };
+}
+
 interface Palette {
   bg: string;
   line: string;
@@ -134,7 +235,11 @@ export class StaffView {
 
   private notes: StaffNote[] = [];
   private opts: StaffOptions = {
-    sharps: 0, beatsPerBar: 4, pickupBeats: 0, clefs: ["treble"], showNames: true,
+    sharps: 0,
+    beatsPerBar: 4,
+    pickupBeats: 0,
+    clefs: ["treble"],
+    showNames: true,
   };
 
   /** Notes with `index < doneIndex` have been played. */
@@ -161,8 +266,13 @@ export class StaffView {
    */
   private minGap = 1;
   private palette: Palette = {
-    bg: "#0b0e14", line: "#39445a", ink: "#e8ecf3", dim: "#7f8aa0",
-    accent: "#f2b441", ok: "#33d6c0", bad: "#ff6b6b",
+    bg: "#0b0e14",
+    line: "#39445a",
+    ink: "#e8ecf3",
+    dim: "#7f8aa0",
+    accent: "#f2b441",
+    ok: "#33d6c0",
+    bad: "#ff6b6b",
   };
 
   constructor(canvas: HTMLCanvasElement) {
@@ -284,48 +394,21 @@ export class StaffView {
     this.hitPoints = [];
 
     const grand = this.opts.clefs.length > 1;
-    const pad = 8;
-    // Vertical budget in staff-gap units: the staff bodies (4 gaps each, plus a
-    // 5-gap corridor between the two systems of a grand staff), the ledger-line
-    // room above, and the ledger + note-name lane below.
-    const ABOVE = 3;
-    const BELOW = 3.4;
-    const bodies = grand ? 13 : 4;
-    const s = clamp((h - 2 * pad) / (bodies + ABOVE + BELOW), 5, this.opts.maxSpace ?? 22);
-    // Centre the whole system rather than pinning it to the top: on a tall
-    // phone screen a top-anchored staff leaves a dead half-screen underneath.
-    const blockTop = Math.max(pad, (h - (bodies + ABOVE + BELOW) * s) / 2);
-    const staffTops = grand
-      ? [blockTop + ABOVE * s, blockTop + (ABOVE + 9) * s]
-      : [blockTop + ABOVE * s];
-
-    // --- fixed gutter: clef + key signature ---
-    // Sized from its contents rather than from a constant. A constant wide
-    // enough for four sharps wastes a third of a 393 px phone screen on a piece
-    // in C major; and when four sharps really are needed, the accidentals are
-    // squeezed rather than allowed to push the music off the screen.
-    const accidentals = Math.min(Math.abs(this.opts.sharps), 7);
-    const keyX = 8 + 2.5 * s;
-    let accStep = 0.85 * s;
-    let gutter = keyX + accidentals * accStep + (accidentals > 0 ? 10 : 8);
-    const maxGutter = w * 0.34;
-    if (accidentals > 0 && gutter > maxGutter) {
-      accStep = Math.max(0.52 * s, (maxGutter - keyX - 10) / accidentals);
-      gutter = keyX + accidentals * accStep + 10;
-    }
-
-    // Keep a little of what was just played visible to the left of the
-    // playhead; on a narrow phone that collapses to just past the clef.
-    const playX = Math.max(gutter + 1.6 * s + 10, Math.min(w * 0.28, 260));
-
-    // Horizontal scale comes from the SHORTEST note in the piece, so its head
-    // always has room. Fixing pixels-per-beat instead would overlap the heads of
-    // a sixteenth-note passage on a phone; this makes dense music scroll faster
-    // rather than become illegible, and leaves quarter-note pieces spacious.
-    // 1.65 staff spaces per shortest note: a head is 1.32 wide, so that leaves a
-    // small gap. Tighter and the heads touch; looser and a phone shows less than
-    // one beat of music ahead.
-    const scrollPxPerBeat = clamp((1.65 * s) / this.minGap, 46, 200);
+    const geom = systemLayout({
+      width: w,
+      height: h,
+      clefCount: this.opts.clefs.length,
+      sharps: this.opts.sharps,
+      maxSpace: this.opts.maxSpace,
+      minGap: this.minGap,
+    });
+    const s = geom.space;
+    const staffTops = geom.staffTops;
+    const accStep = geom.accStep;
+    const keyX = geom.keyX;
+    const gutter = geom.gutter;
+    const playX = geom.playX;
+    const scrollPxPerBeat = geom.pxPerBeat;
 
     const { beatsPerBar, pickupBeats } = this.opts;
     const firstBoundary = pickupBeats > 0 ? pickupBeats : 0;
@@ -350,11 +433,13 @@ export class StaffView {
     }
 
     const toX = (beat: number): number =>
-      paged ? gutter + 7 + (beat - pageStart) * pxPerBeat : playX + (beat - this.beatNow) * pxPerBeat;
-    const firstBeat = paged ? pageStart - firstBoundary : this.beatNow - (playX - gutter) / pxPerBeat;
-    const lastBeat = paged
-      ? pageStart + beatsPerPage
-      : this.beatNow + (w - playX) / pxPerBeat;
+      paged
+        ? gutter + 7 + (beat - pageStart) * pxPerBeat
+        : playX + (beat - this.beatNow) * pxPerBeat;
+    const firstBeat = paged
+      ? pageStart - firstBoundary
+      : this.beatNow - (playX - gutter) / pxPerBeat;
+    const lastBeat = paged ? pageStart + beatsPerPage : this.beatNow + (w - playX) / pxPerBeat;
     /** Where the "you are here" line goes. */
     const cursorX = paged ? toX(this.beatNow) : playX;
 
@@ -407,9 +492,7 @@ export class StaffView {
         // One stem direction for the whole group, from where its heads sit.
         const mean = ys.reduce((sum, y) => sum + y, 0) / ys.length;
         const stemUp = mean > top + 2 * s;
-        const beamY = stemUp
-          ? Math.min(...ys) - 3.1 * s
-          : Math.max(...ys) + 3.1 * s;
+        const beamY = stemUp ? Math.min(...ys) - 3.1 * s : Math.max(...ys) + 3.1 * s;
         // Two beams for sixteenths and shorter, one for eighths and triplets.
         const lines = group.some((n) => n.offset - n.onset <= 0.3) ? 2 : 1;
         for (const n of group) beams.set(n, { y: beamY, stemUp, lines });
@@ -521,10 +604,7 @@ export class StaffView {
     const state = this.stateOf(note);
 
     const missed = state === "current" && performance.now() < this.wrongUntil;
-    const color = missed ? c.bad
-      : state === "done" ? c.ok
-      : state === "current" ? c.accent
-      : c.ink;
+    const color = missed ? c.bad : state === "done" ? c.ok : state === "current" ? c.accent : c.ink;
     ctx.globalAlpha = state === "done" ? 0.5 : 1;
     ctx.fillStyle = color;
     ctx.strokeStyle = color;
@@ -561,7 +641,10 @@ export class StaffView {
     ctx.ellipse(0, 0, s * 0.66, s * 0.47, 0, 0, Math.PI * 2);
     ctx.restore();
     if (filled) ctx.fill();
-    else { ctx.lineWidth = 1.8; ctx.stroke(); }
+    else {
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+    }
 
     // Stem (whole notes have none) — up below the middle line, down above it,
     // unless a beam group has already picked a direction for the whole run.
@@ -579,7 +662,12 @@ export class StaffView {
       if (!beam && beats <= 0.75) {
         ctx.beginPath();
         ctx.moveTo(sx, sy);
-        ctx.quadraticCurveTo(sx + s * 1.3, sy + (stemUp ? s * 0.9 : -s * 0.9), sx + s * 0.8, sy + (stemUp ? s * 1.9 : -s * 1.9));
+        ctx.quadraticCurveTo(
+          sx + s * 1.3,
+          sy + (stemUp ? s * 0.9 : -s * 0.9),
+          sx + s * 0.8,
+          sy + (stemUp ? s * 1.9 : -s * 1.9),
+        );
         ctx.lineWidth = 2.1;
         ctx.stroke();
       }
@@ -589,7 +677,13 @@ export class StaffView {
     const base = beats / 1.5;
     if (Math.abs(Math.log2(base) - Math.round(Math.log2(base))) < 1e-6) {
       ctx.beginPath();
-      ctx.arc(x + s * 1.25, y - (Math.round(sp.d - bottomLine) % 2 === 0 ? s * 0.5 : 0), s * 0.17, 0, Math.PI * 2);
+      ctx.arc(
+        x + s * 1.25,
+        y - (Math.round(sp.d - bottomLine) % 2 === 0 ? s * 0.5 : 0),
+        s * 0.17,
+        0,
+        Math.PI * 2,
+      );
       ctx.fill();
     }
 
@@ -641,24 +735,19 @@ export class StaffView {
   /** The accidental to print, or "" when the key signature already covers it. */
   private accidentalFor(sp: Spelling): string {
     const { sharps } = this.opts;
-    const inKey = sharps > 0
-      ? SHARP_ORDER.slice(0, sharps).includes(sp.letter)
-      : sharps < 0
-        ? FLAT_ORDER.slice(0, -sharps).includes(sp.letter)
-        : false;
+    const inKey =
+      sharps > 0
+        ? SHARP_ORDER.slice(0, sharps).includes(sp.letter)
+        : sharps < 0
+          ? FLAT_ORDER.slice(0, -sharps).includes(sp.letter)
+          : false;
     const keyAlter = inKey ? (sharps > 0 ? 1 : -1) : 0;
     if (sp.alter === keyAlter) return "";
     if (sp.alter === 0) return "♮";
     return sp.alter === 1 ? "♯" : "♭";
   }
 
-  private drawKeySignature(
-    clef: Clef,
-    top: number,
-    s: number,
-    x0: number,
-    step: number,
-  ): void {
+  private drawKeySignature(clef: Clef, top: number, s: number, x0: number, step: number): void {
     const { ctx, palette: c } = this;
     const { sharps } = this.opts;
     if (sharps === 0) return;

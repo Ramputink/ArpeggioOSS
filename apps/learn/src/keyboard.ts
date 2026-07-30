@@ -99,6 +99,21 @@ export class KeyboardView {
     if (lo && hi) this.reveal(lo, hi);
   }
 
+  /**
+   * Outline the keys a hand starts on, before the first note.
+   *
+   * Distinct from `setHighlight`, which says "play this now": this says "put
+   * your hand here", which is the instruction a beginner is missing and a
+   * printed score never gives. Pass an empty array to clear it.
+   */
+  setGuide(midis: number[]): void {
+    for (const [midi, el] of this.keys) el.classList.toggle("guide", midis.includes(midi));
+    if (midis.length === 0) return;
+    const lo = this.keys.get(Math.min(...midis));
+    const hi = this.keys.get(Math.max(...midis));
+    if (lo && hi) this.reveal(lo, hi);
+  }
+
   /** Brief feedback on a played key: teal for a match, rose for a wrong note. */
   flash(midi: number, ok: boolean): void {
     const el = this.keys.get(midi);
@@ -209,7 +224,9 @@ export class KeyboardView {
   }
 
   private layout(): void {
-    const whiteCount = [...this.keys.values()].filter((el) => el.classList.contains("white")).length;
+    const whiteCount = [...this.keys.values()].filter((el) =>
+      el.classList.contains("white"),
+    ).length;
     if (whiteCount === 0) return;
     const available = this.scroller.clientWidth;
     // A hidden play screen measures 0 wide, which would freeze every key at the

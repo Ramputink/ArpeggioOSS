@@ -178,10 +178,16 @@ test("input level verdicts cover silence through clipping", () => {
 // ---------------------------------------------------------------------------
 // Session plan
 // ---------------------------------------------------------------------------
-test("a first-ever session opens with a piece, not with an empty plan", () => {
+test("a first-ever session opens with a warm-up and a piece", () => {
+  // Nothing has been learnt yet, so there is nothing to review — but there is
+  // always something to warm up on, because the warm-up is a generated exercise
+  // rather than a piece the learner has to have played before.
   const plan = planSession({ stars: {}, lastPlayed: {}, weakBars: [] });
-  assert.equal(plan.length, 1);
-  assert.equal(plan[0].kind, "new");
+  assert.deepEqual(
+    plan.map((s) => s.kind),
+    ["warmup", "new"],
+  );
+  assert.ok(plan[0].song.id.startsWith("ex-"), "the warm-up is a technique exercise");
 });
 
 test("warm-up comes first, the drill second, the new piece last", () => {
@@ -190,19 +196,31 @@ test("warm-up comes first, the drill second, the new piece last", () => {
     lastPlayed: { twinkle: 1000, "ode-to-joy": 2000 },
     weakBars: [5, 7],
   });
-  assert.deepEqual(plan.map((s) => s.kind), ["warmup", "review", "new"]);
+  assert.deepEqual(
+    plan.map((s) => s.kind),
+    ["warmup", "review", "new"],
+  );
   // The drill targets the most recent piece and the bars that failed in it.
   assert.equal(plan[1].song.id, "ode-to-joy");
   assert.deepEqual(plan[1].loop, { from: 5, to: 7 });
-  // The warm-up is the easiest thing already learnt, not the hardest.
-  assert.equal(plan[0].song.level, 1);
+  // The warm-up is a technique exercise: short, nothing to remember, and the
+  // one thing the library never offered before.
+  assert.ok(plan[0].song.id.startsWith("ex-"));
   // And the new piece is one that has never been finished.
   assert.equal(plan[2].song.id, "mary-lamb");
 });
 
-test("with nothing failing there is no drill step", () => {
+test("with no weak bars the review step revisits the whole piece", () => {
+  // `weakBars` only exists after a run in this app session, so it is empty most
+  // of the time. Dropping the review step whenever it is empty made the middle
+  // of the announced plan disappear on nearly every session; revisiting the last
+  // piece whole is the honest fallback, and it says so rather than pretending to
+  // have found a weak bar.
   const plan = planSession({ stars: { twinkle: 3 }, lastPlayed: { twinkle: 1 }, weakBars: [] });
-  assert.ok(!plan.some((s) => s.kind === "review"));
+  const review = plan.find((s) => s.kind === "review");
+  assert.ok(review, "the plan keeps its middle step");
+  assert.equal(review.song.id, "twinkle");
+  assert.equal(review.loop, undefined, "no loop is claimed when no bar is known to be weak");
 });
 
 test("a finished library still yields a plan", () => {
@@ -217,5 +235,8 @@ test("a finished library still yields a plan", () => {
   // empty: it falls back to revisiting the hardest piece.
   assert.ok(plan.length >= 1);
   assert.ok(!plan.some((s) => s.kind === "new"));
-  assert.ok(plan.some((s) => s.song.level === 6), "should point at the hard end");
+  assert.ok(
+    plan.some((s) => s.song.level === 6),
+    "should point at the hard end",
+  );
 });

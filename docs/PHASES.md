@@ -5,17 +5,17 @@ is **scaffold/interface only**, and how the pieces connect. Everything algorithm
 runs and is unit-tested headless; the device/app layers (iOS audio, native shell)
 are interface + design only, since they can't be built or run in this environment.
 
-| Phase | Scope | Status | Where |
-|------|-------|--------|-------|
-| **0** | Canonical internal model `{onset,offset,midi,voice,staff,measure,…}` | ✅ built | `packages/musicxml-parser/src/model.ts` |
-| **1** | OMR: image/PDF → MusicXML → model, quality report | ✅ built **& deployed** on the Intel Mac | `services/omr`, `packages/musicxml-parser`, `packages/omr-client` |
-| **2** | Render + viewer (cursor, tempo, hands, synth playback) | ✅ core built & browser-verified (piano-roll). Staff render (OSMD/Verovio in a WebView) = scaffold | `apps/viewer` |
-| **3** | Low-latency mic capture → audio frames | 🟡 **interface only** (`AudioFrame`); native iOS `AVAudioEngine` not buildable here | `packages/practice-engine/src/types.ts` |
-| **4** | Two detection engines + combiner | ✅ built & tested. MOTOR 1 (YIN) real; MOTOR 2 = stub seam (real = Basic Pitch/ONNX/Core ML) | `packages/practice-engine/src/detection` |
-| **5** | Score following (follow-you v1 + DTW v2) | ✅ built & tested | `packages/practice-engine/src/follower` |
-| **6** | Feedback loops 1 (calibration) & 2 (student model) | ✅ built & tested. Loop 3 (model retraining) intentionally out of scope | `packages/practice-engine/src/feedback` |
-| **—** | Practice loop joining Phases 4→5→6 | ✅ built & tested (`PracticeSession`) | `packages/practice-engine/src/session.ts` |
-| **7** | Product: onboarding, library, stats, iOS packaging | 🟡 design/scaffold | this doc + `ROADMAP` |
+| Phase | Scope                                                                | Status                                                                                             | Where                                                             |
+| ----- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| **0** | Canonical internal model `{onset,offset,midi,voice,staff,measure,…}` | ✅ built                                                                                           | `packages/musicxml-parser/src/model.ts`                           |
+| **1** | OMR: image/PDF → MusicXML → model, quality report                    | ✅ built **& deployed** on the Intel Mac                                                           | `services/omr`, `packages/musicxml-parser`, `packages/omr-client` |
+| **2** | Render + viewer (cursor, tempo, hands, synth playback)               | ✅ core built & browser-verified (piano-roll). Staff render (OSMD/Verovio in a WebView) = scaffold | `archive/viewer`                                                  |
+| **3** | Low-latency mic capture → audio frames                               | 🟡 **interface only** (`AudioFrame`); native iOS `AVAudioEngine` not buildable here                | `packages/practice-engine/src/types.ts`                           |
+| **4** | Two detection engines + combiner                                     | ✅ built & tested. MOTOR 1 (YIN) real; MOTOR 2 = stub seam (real = Basic Pitch/ONNX/Core ML)       | `packages/practice-engine/src/detection`                          |
+| **5** | Score following (follow-you v1 + DTW v2)                             | ✅ built & tested                                                                                  | `packages/practice-engine/src/follower`                           |
+| **6** | Feedback loops 1 (calibration) & 2 (student model)                   | ✅ built & tested. Loop 3 (model retraining) intentionally out of scope                            | `packages/practice-engine/src/feedback`                           |
+| **—** | Practice loop joining Phases 4→5→6                                   | ✅ built & tested (`PracticeSession`)                                                              | `packages/practice-engine/src/session.ts`                         |
+| **7** | Product: onboarding, library, stats, iOS packaging                   | 🟡 design/scaffold                                                                                 | this doc + `ROADMAP`                                              |
 
 **Tests:** `npm test` → 9 parser + 23 practice-engine = **32 passing**, headless.
 
@@ -35,7 +35,7 @@ are interface + design only, since they can't be built or run in this environmen
 ```
 
 The whole loop consumes the canonical `Score` produced by Phase 1. A UI (the
-`apps/viewer` piano-roll today, a native/OSMD view later) reads `session.progress`
+the archived piano-roll prototype, a native/OSMD view later) reads `session.progress`
 to move the cursor and show feedback.
 
 ## The integration contract (what the app must provide)

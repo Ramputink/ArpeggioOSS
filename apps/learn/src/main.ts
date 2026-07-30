@@ -1,47 +1,53 @@
 /**
  * App shell for Arpeggio Learn.
  *
- *   library  -> level, achievements, the curriculum, imported scores
- *   setup    -> input, judging, hands, tempo
+ *   library  -> level, achievements, the curriculum, warm-ups, imported scores
+ *   setup    -> input, judging, hands, tempo, where to put the hands
  *   play     -> animated notation (scrolling or paged) + keyboard or music stand
  *   result   -> stars, XP, timing, what to work on next
  *
- * The shell owns the DOM and the screen state machine. Everything musical lives
- * in `runner.ts` (judging), `staff.ts` (notation) and `keyboard.ts` (input);
- * everything countable in `gamification.ts`; and the two things that have to be
- * right for a real piano — staying awake and hearing the instrument — in
- * `wakeLock.ts` and `micCheck.ts`.
+ * The shell owns the screen state machine and the wiring between the parts.
+ * Everything else has its own home: judging in `runner.ts`, notation in
+ * `staff.ts`, input in `keyboard.ts`, rewards in `gamification.ts`, minutes in
+ * `practiceTime.ts`, the two screens with the most markup in `libraryView.ts`
+ * and `resultView.ts`, and every sentence the app composes in `copy.ts`.
  */
-import { LEVEL_GOALS, LEVEL_NAMES, SONGS, type HandChoice, type Level } from "@arpeggio/song-library";
+import { SONGS, type HandChoice } from "@arpeggio/song-library";
 import type { Score } from "@arpeggio/musicxml-parser";
 
+import {
+  HAND_LABEL,
+  JUDGE_HELP,
+  MODE_HELP,
+  fiveFingerSpan,
+  handPositionText,
+  plural,
+  wrongNoteMessage,
+} from "./copy.js";
+import { $, button, closeSheet, el, openSheet, show } from "./dom.js";
 import { confetti } from "./effects.js";
-import {
-  ACHIEVEMENTS,
-  achievementRatio,
-  levelFor,
-  newlyUnlocked,
-  unlockedIds,
-  type Achievement,
-  type Stats,
-} from "./gamification.js";
+import { newlyUnlocked, type Achievement, type Stats } from "./gamification.js";
 import { BRAND_MARK, icon } from "./icons.js";
-import { latencyVerdict } from "./latency.js";
 import { KeyboardView, MIN_KEY_WIDTH, whiteKeysNeeded } from "./keyboard.js";
-import { MicCheck, levelVerdict } from "./micCheck.js";
-import {
-  addImported,
-  loadImported,
-  pieceFromMusicXML,
-  pieceFromSong,
-  removeImported,
-  type Piece,
-} from "./pieces.js";
+import { latencyVerdict } from "./latency.js";
+import { renderAchievements, renderLibrary, type LibraryHandlers } from "./libraryView.js";
+import { wireMicCheck } from "./micCheckView.js";
+import { isCompressedMusicXML, readMxl } from "./mxl.js";
+import { addImported, pieceFromSong, removeImported, type Piece } from "./pieces.js";
+import { PracticeClock } from "./practiceTime.js";
+import { renderResult, renderSessionReport } from "./resultView.js";
 import { Runner, type PracticeMode, type RunSummary } from "./runner.js";
-import { planSession, type SessionStep } from "./session.js";
+import {
+  planSession,
+  summariseSession,
+  type SessionReport,
+  type SessionStep,
+  type StepResult,
+} from "./session.js";
 import { StaffView, noteName, octaveOf, type Clef, type StaffNote } from "./staff.js";
 import {
   applyRun,
+  bankPracticeSeconds,
   loadPrefs,
   loadProgress,
   loadStats,
@@ -50,33 +56,9 @@ import {
   savePrefs,
   starsFor,
   type Prefs,
-  type SongProgress,
 } from "./store.js";
 import { Synth } from "./synth.js";
 import { ScreenAwake } from "./wakeLock.js";
-
-const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
-  const el = document.getElementById(id);
-  if (!el) throw new Error(`#${id} missing`);
-  return el as T;
-};
-
-const MODE_HELP: Record<PracticeMode, string> = {
-  keys: "Toca las teclas del móvil. No necesitas piano.",
-  mic: "Toca en un piano de verdad: la app te escucha por el micrófono.",
-  demo: "La app toca la pieza para que la escuches y la sigas con la vista.",
-};
-
-const JUDGE_HELP = {
-  wait: "El cursor te espera en cada nota. Perdona el ritmo: ideal para leer la pieza por primera vez.",
-  tempo: "El cursor sigue al tempo y corrige si llegas tarde o pronto. Es el modo honesto con el ritmo.",
-};
-
-const HAND_LABEL: Record<HandChoice, string> = {
-  right: "mano derecha",
-  left: "mano izquierda",
-  both: "las dos manos",
-};
 
 /** Largest staff line-gap in each layout, in pixels. */
 const HAND_STAFF_SPACE = 22;
@@ -101,10 +83,13 @@ let currentMeasure = 1;
 /** The guided session, when one is running. */
 let sessionPlan: SessionStep[] = [];
 let sessionStep = -1;
+let sessionResults: StepResult[] = [];
+/** Practice seconds accumulated across the steps of the current session. */
+let sessionSeconds = 0;
 
 const synth = new Synth();
 const awake = new ScreenAwake();
-const micCheck = new MicCheck();
+const clock = new PracticeClock();
 const staff = new StaffView($<HTMLCanvasElement>("staff"));
 const keyboard = new KeyboardView($("keyboard"), {
   onPress: (midi) => runner?.press(midi),
@@ -114,6 +99,8 @@ const keyboard = new KeyboardView($("keyboard"), {
 /** Absolute URLs so the app also works from a GitHub Pages sub-path. */
 const MODEL_URL = new URL("models/basic-pitch/model.json", document.baseURI).href;
 const WORKER_URL = new URL("polyWorker.js", document.baseURI).href;
+
+const now = (): number => performance.now() / 1000;
 
 // ---------------------------------------------------------------------------
 // Static chrome
@@ -125,13 +112,13 @@ $("back").innerHTML = icon("back", 22);
 $("heroCta").innerHTML = icon("play", 22);
 $("profileChevron").innerHTML = icon("chevron", 18);
 $("streakIcon").innerHTML = icon("bolt", 14);
-for (const el of document.querySelectorAll<HTMLElement>("[data-icon]")) {
-  const size = el.classList.contains("howto-icon") ? 19 : el.closest(".standbtn") ? 21 : 17;
-  el.innerHTML = icon(el.dataset.icon ?? "", size);
+for (const node of document.querySelectorAll<HTMLElement>("[data-icon]")) {
+  const size = node.classList.contains("howto-icon") ? 19 : node.closest(".ctrl") ? 20 : 17;
+  node.innerHTML = icon(node.dataset.icon ?? "", size);
 }
 $("footNote").textContent =
-  "Diecisiete piezas de dominio público, de la más fácil a la más difícil. " +
-  "Empieza por «María tenía un corderito»: solo usa tres dedos, y lleva la digitación escrita.";
+  "Diecinueve piezas de dominio público, de la más fácil a la más difícil, más los " +
+  "ejercicios de técnica. Empieza por «María tenía un corderito»: solo usa tres dedos.";
 
 // ---------------------------------------------------------------------------
 // Theme
@@ -139,7 +126,10 @@ $("footNote").textContent =
 function applyTheme(theme: "dark" | "light"): void {
   document.documentElement.dataset.theme = theme;
   $("themeBtn").innerHTML = icon(theme === "dark" ? "sun" : "moon");
-  $("themeBtn").setAttribute("aria-label", theme === "dark" ? "Usar tema claro" : "Usar tema oscuro");
+  $("themeBtn").setAttribute(
+    "aria-label",
+    theme === "dark" ? "Usar tema claro" : "Usar tema oscuro",
+  );
   document
     .querySelector('meta[name="theme-color"]')
     ?.setAttribute("content", theme === "dark" ? "#0a0d12" : "#f5f7fb");
@@ -147,11 +137,15 @@ function applyTheme(theme: "dark" | "light"): void {
 
 applyTheme(prefs.theme);
 $("themeBtn").addEventListener("click", () => {
-  prefs = { ...prefs, theme: prefs.theme === "dark" ? "light" : "dark" };
-  savePrefs(prefs);
+  setPrefs({ theme: prefs.theme === "dark" ? "light" : "dark" });
   applyTheme(prefs.theme);
   staff.refreshTheme();
 });
+
+function setPrefs(patch: Partial<Prefs>): void {
+  prefs = { ...prefs, ...patch };
+  savePrefs(prefs);
+}
 
 // ---------------------------------------------------------------------------
 // Music-stand mode
@@ -163,22 +157,23 @@ $("themeBtn").addEventListener("click", () => {
 function applyStand(): void {
   document.body.dataset.stand = prefs.stand ? "1" : "";
   $("standBtn").setAttribute("aria-pressed", String(prefs.stand));
-  $("standBar").classList.toggle("hidden", !prefs.stand);
+  // "Parar" only earns its space on the stand; in the hand, the back arrow in
+  // the title bar is right there.
+  show("ctrlStop", prefs.stand);
   staff.setMaxSpace(prefs.stand ? STAND_STAFF_SPACE : HAND_STAFF_SPACE);
   updateRotateHint();
 }
 
 function updateRotateHint(): void {
   const playing = !$("play").classList.contains("hidden");
-  const show = playing && prefs.stand && window.matchMedia("(orientation: portrait)").matches;
-  $("rotateHint").classList.toggle("hidden", !show);
+  const showHint = playing && prefs.stand && window.matchMedia("(orientation: portrait)").matches;
+  show("rotateHint", showHint);
 }
 window.addEventListener("orientationchange", updateRotateHint);
 window.addEventListener("resize", updateRotateHint);
 
 $("standBtn").addEventListener("click", () => {
-  prefs = { ...prefs, stand: !prefs.stand };
-  savePrefs(prefs);
+  setPrefs({ stand: !prefs.stand });
   applyStand();
   syncKeyboardVisibility();
 });
@@ -190,20 +185,14 @@ $("standBtn").addEventListener("click", () => {
  */
 function syncKeyboardVisibility(): void {
   const hide = prefs.stand || prefs.mode === "mic";
-  $("keyboard").classList.toggle("hidden", hide);
+  show("keyboard", !hide);
   if (!hide) keyboard.relayout();
 }
 
 // ---------------------------------------------------------------------------
 // Sheets
 // ---------------------------------------------------------------------------
-function openSheet(id: string): void {
-  $(id).classList.remove("hidden");
-}
-function closeSheet(id: string): void {
-  $(id).classList.add("hidden");
-}
-for (const id of ["setup", "settings", "achievements", "miccheck", "session"]) {
+for (const id of ["setup", "settings", "achievements", "miccheck", "session", "report"]) {
   $(id).addEventListener("click", (e) => {
     if (e.target === $(id)) closeSheet(id);
   });
@@ -212,194 +201,21 @@ for (const id of ["setup", "settings", "achievements", "miccheck", "session"]) {
 // ---------------------------------------------------------------------------
 // Library
 // ---------------------------------------------------------------------------
-function renderLibrary(): void {
-  const progress = loadProgress();
-  renderProfile();
-  renderHero(progress);
+const libraryHandlers: LibraryHandlers = {
+  onOpen: (p) => openSetup(p),
+  onDeleteImported: (id) => {
+    removeImported(id);
+    refreshLibrary();
+  },
+  onRefresh: () => refreshLibrary(),
+};
 
-  const list = $("songList");
-  list.replaceChildren();
-
-  ([1, 2, 3, 4, 5, 6] as Level[]).forEach((level) => {
-    const songs = SONGS.filter((s) => s.level === level);
-    if (songs.length === 0) return;
-    const done = songs.filter((s) => starsFor(progress[s.id]) > 0).length;
-
-    const section = document.createElement("section");
-    section.className = "level";
-    const head = document.createElement("div");
-    head.className = "level-head";
-    head.append(
-      el("span", "level-chip", `Nivel ${level}`),
-      el("h2", "", LEVEL_NAMES[level]),
-      el("span", "level-count", `${done}/${songs.length}`),
-    );
-    const cards = document.createElement("div");
-    cards.className = "cards";
-    songs.forEach((s, i) =>
-      cards.append(pieceCard(pieceFromSong(s), String(i + 1), progress[s.id])),
-    );
-    section.append(head, el("p", "level-goal", LEVEL_GOALS[level]), cards);
-    list.append(section);
-  });
-
-  renderImported(progress, list);
-}
-
-/** "Mis partituras": whatever the learner brought in as MusicXML. */
-function renderImported(progress: Record<string, SongProgress>, list: HTMLElement): void {
-  const records = loadImported();
-  if (records.length === 0) return;
-  const section = document.createElement("section");
-  section.className = "level";
-  const head = document.createElement("div");
-  head.className = "level-head";
-  head.append(
-    el("span", "level-chip", "Tuyas"),
-    el("h2", "", "Mis partituras"),
-    el("span", "level-count", String(records.length)),
-  );
-  const cards = document.createElement("div");
-  cards.className = "cards";
-  for (const record of records) {
-    let imported: Piece;
-    try {
-      imported = pieceFromMusicXML(record.id, record.name, record.xml);
-    } catch {
-      // A stored file that no longer parses must not take the library down.
-      continue;
-    }
-    const card = pieceCard(imported, "★", progress[record.id]);
-    card.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      removeImported(record.id);
-      renderLibrary();
-    });
-    cards.append(card);
-  }
-  section.append(head, el("p", "level-goal", "Mantén pulsado con el botón derecho para quitar una."), cards);
-  list.append(section);
-}
-
-function pieceCard(p: Piece, badge: string, progress?: SongProgress): HTMLButtonElement {
-  const stars = starsFor(progress);
-  const card = document.createElement("button");
-  card.type = "button";
-  card.className = "card" + (stars > 0 ? " done" : "");
-
-  const body = document.createElement("span");
-  body.className = "card-body";
-  body.append(
-    el("span", "card-title", p.title),
-    el("span", "card-meta", `${p.composer} · ${p.bpm} ppm`),
-  );
-
-  const rating = document.createElement("span");
-  rating.className = "card-stars";
-  rating.setAttribute("aria-label", `${stars} de 3 estrellas`);
-  for (let i = 0; i < 3; i++) {
-    const star = document.createElement("span");
-    star.className = i < stars ? "" : "off";
-    star.innerHTML = icon("star", 13);
-    rating.append(star);
-  }
-  const chevron = el("span", "card-chevron", "");
-  chevron.innerHTML = icon("chevron", 16);
-
-  card.append(el("span", "card-index", badge), body, rating, chevron);
-  card.addEventListener("click", () => openSetup(p));
-  return card;
-}
-
-function el(tag: string, className: string, text: string): HTMLElement {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text) node.textContent = text;
-  return node;
-}
-
-/** "1 nota tocada" / "26 notas tocadas" — Spanish copy needs the agreement. */
-function plural(count: number, one: string, many: string): string {
-  return `${count} ${count === 1 ? one : many}`;
-}
-
-function renderProfile(): void {
-  const stats = loadStats();
-  const state = levelFor(stats.xp);
-  $("profileLevel").textContent = String(state.level);
-  $("profileTitle").textContent = state.title;
-  $("profileXp").textContent = `${state.into} / ${state.need} XP`;
-  $<HTMLElement>("profileBar").style.width = `${(state.into / state.need) * 100}%`;
-
-  const unlocked = unlockedIds(stats).length;
-  const next = nextAchievement(stats);
-  const count = `${unlocked}/${ACHIEVEMENTS.length} logros`;
-  $("profileMeta").textContent = next
-    ? `${count} · siguiente: ${next.title} (${Math.min(next.progress(stats), next.goal)}/${next.goal})`
-    : `${count} · lo has conseguido todo`;
-}
-
-function nextAchievement(stats: Stats): Achievement | undefined {
-  return ACHIEVEMENTS.filter((a) => a.progress(stats) < a.goal).sort(
-    (a, b) => achievementRatio(b, stats) - achievementRatio(a, stats),
-  )[0];
-}
-
-function renderHero(progress: Record<string, SongProgress>): void {
-  const hero = $<HTMLButtonElement>("hero");
-  const lastId = Object.entries(progress).sort((a, b) => b[1].lastPlayed - a[1].lastPlayed)[0]?.[0];
-  const last = SONGS.find((s) => s.id === lastId);
-  if (!last) {
-    hero.classList.add("hidden");
-    return;
-  }
-  hero.classList.remove("hidden");
-  $("heroTitle").textContent = last.title;
-  $("heroSub").textContent = `${last.composer} · ${HAND_LABEL[prefs.hand]}`;
-  // Assigned, not added: renderLibrary runs on every return to this screen.
-  hero.onclick = () => openSetup(pieceFromSong(last));
-}
-
-// ---------------------------------------------------------------------------
-// Achievements
-// ---------------------------------------------------------------------------
-function renderAchievements(): void {
-  const stats = loadStats();
-  const unlocked = unlockedIds(stats);
-  $("achHeadline").textContent =
-    `${unlocked.length} de ${ACHIEVEMENTS.length} conseguidos · ` +
-    plural(stats.notes, "nota tocada", "notas tocadas") + " · " +
-    plural(stats.songs.length, "pieza terminada", "piezas terminadas");
-
-  const list = $("achList");
-  list.replaceChildren();
-  const order = [...ACHIEVEMENTS].sort(
-    (a, b) => achievementRatio(b, stats) - achievementRatio(a, stats),
-  );
-  for (const a of order) {
-    const value = a.progress(stats);
-    const done = value >= a.goal;
-    const row = document.createElement("div");
-    row.className = "ach" + (done ? " done" : "");
-    const iconBox = el("span", "ach-icon", "");
-    iconBox.innerHTML = icon(done ? "check" : a.icon, 18);
-    const body = document.createElement("span");
-    body.className = "ach-body";
-    body.append(el("b", "", a.title), el("small", "", a.description));
-    if (!done) {
-      const track = el("span", "ach-track", "");
-      const fill = document.createElement("i");
-      fill.style.width = `${achievementRatio(a, stats) * 100}%`;
-      track.append(fill);
-      body.append(track);
-    }
-    row.append(iconBox, body, el("span", "ach-count", `${Math.min(value, a.goal)}/${a.goal}`));
-    list.append(row);
-  }
+function refreshLibrary(): void {
+  renderLibrary(loadProgress(), loadStats(), prefs, libraryHandlers);
 }
 
 $("profile").addEventListener("click", () => {
-  renderAchievements();
+  renderAchievements(loadStats());
   openSheet("achievements");
 });
 $("achDone").addEventListener("click", () => closeSheet("achievements"));
@@ -420,6 +236,12 @@ function toastAchievement(a: Achievement): void {
   window.setTimeout(() => toast.remove(), 6000);
 }
 
+function announce(before: Stats, after: Stats): void {
+  newlyUnlocked(before, after).forEach((a, i) =>
+    window.setTimeout(() => toastAchievement(a), 450 + i * 700),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
@@ -428,6 +250,7 @@ const OPTIONS: Array<[string, keyof Prefs]> = [
   ["optCountIn", "countIn"],
   ["optHaptics", "haptics"],
   ["optMetronome", "metronome"],
+  ["optAccompany", "accompany"],
   ["optPageView", "pageView"],
   ["optStand", "stand"],
 ];
@@ -440,8 +263,7 @@ function syncSettings(): void {
 
 for (const [id, key] of OPTIONS) {
   $(id).addEventListener("change", (e) => {
-    prefs = { ...prefs, [key]: (e.target as HTMLInputElement).checked };
-    savePrefs(prefs);
+    setPrefs({ [key]: (e.target as HTMLInputElement).checked } as Partial<Prefs>);
     if (key === "showNames") {
       staff.setShowNames(prefs.showNames);
       keyboard.setNames(prefs.showNames);
@@ -475,98 +297,24 @@ $("resetProgress").addEventListener("click", () => {
   resetProgress();
   btn.dataset.armed = "";
   btn.textContent = "Progreso borrado";
-  renderLibrary();
+  refreshLibrary();
 });
 
 // ---------------------------------------------------------------------------
 // First run
 // ---------------------------------------------------------------------------
-if (!prefs.introSeen) $("intro").classList.remove("hidden");
+if (!prefs.introSeen) show("intro", true);
 $("introDone").addEventListener("click", () => {
-  prefs = { ...prefs, introSeen: true };
-  savePrefs(prefs);
-  $("intro").classList.add("hidden");
+  setPrefs({ introSeen: true });
+  show("intro", false);
 });
 
 // ---------------------------------------------------------------------------
 // Microphone check
 // ---------------------------------------------------------------------------
-/** Pitch class the verification asks for: DO, the note every beginner can find. */
-const CHECK_PITCH_CLASS = 0;
-let micHeardTarget = false;
-
-function openMicCheck(): void {
-  micHeardTarget = false;
-  $("micVerdict").textContent = "Pulsa «Escuchar» y toca cualquier tecla.";
-  $("micPitch").textContent = "—";
-  $("micFloor").textContent = "—";
-  $("micTask").classList.add("hidden");
-  const stats = runner?.latency;
-  $("micLatency").textContent =
-    stats && stats.samples > 0 ? `${stats.p50} ms` : "—";
-  openSheet("miccheck");
-}
-
-$("micCheckBtn").addEventListener("click", () => {
-  closeSheet("settings");
-  openMicCheck();
-});
-
-$("micStart").addEventListener("click", () => {
-  void (async () => {
-    try {
-      $("micTask").classList.remove("hidden");
-      $("micTask").textContent = "Toca un DO para confirmar que te oigo bien.";
-      await micCheck.start((reading) => {
-        const pct = Math.min(100, Math.round(reading.rms * 260));
-        const bar = $<HTMLElement>("micLevel");
-        bar.style.width = `${pct}%`;
-        const verdict = levelVerdict(reading.rms);
-        bar.classList.toggle("hot", verdict === "clipping" || verdict === "loud");
-        bar.classList.toggle("low", verdict === "quiet");
-        $("micVerdict").textContent = MIC_VERDICT[verdict];
-        if (reading.midi !== null && reading.confidence > 0.6) {
-          $("micPitch").textContent = `${noteName(reading.midi, 0)}${octaveOf(reading.midi)}`;
-          if (!micHeardTarget && reading.midi % 12 === CHECK_PITCH_CLASS) {
-            micHeardTarget = true;
-            $("micTask").textContent = "Perfecto: te oigo bien. Ya puedes practicar con el piano.";
-            $("micTask").classList.remove("warn");
-          }
-        }
-      });
-    } catch (err) {
-      $("micVerdict").textContent = (err as Error).message || "No se pudo abrir el micrófono";
-    }
-  })();
-});
-
-const MIC_VERDICT: Record<ReturnType<typeof levelVerdict>, string> = {
-  silence: "No oigo nada. ¿Está el micrófono tapado?",
-  quiet: "Te oigo muy bajito: acerca el móvil al piano.",
-  good: "Nivel perfecto.",
-  loud: "Un poco fuerte: aleja el móvil un palmo.",
-  clipping: "Demasiado fuerte, se satura. Aleja el móvil.",
-};
-
-$("micFloorBtn").addEventListener("click", () => {
-  void (async () => {
-    $("micTask").classList.remove("hidden");
-    $("micTask").textContent = "No toques nada durante dos segundos…";
-    micCheck.resetPeak();
-    await delay(2000);
-    const floor = micCheck.meanRms;
-    $("micFloor").textContent = floor.toFixed(3);
-    $("micTask").textContent =
-      floor > 0.02
-        ? "La sala es ruidosa: acerca el móvil al piano o busca un sitio más silencioso."
-        : "Sala silenciosa. Perfecto para practicar.";
-  })();
-});
-
-$("micDone").addEventListener("click", () => {
-  micCheck.stop();
-  closeSheet("miccheck");
-});
+// Its own module: it is a self-contained diagnostic, and the only thing it needs
+// from the rest of the app is the latency the last microphone run measured.
+wireMicCheck(() => runner?.latency ?? null);
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -582,31 +330,38 @@ function openSetup(p: Piece, loop?: { from: number; to: number }): void {
     (p.hasLeft ? " · dos manos" : " · solo melodía") +
     (loopBars ? ` · bucle ${loopBars.from}–${loopBars.to}` : "");
   $("setupTip").textContent = p.tip;
-  $<HTMLInputElement>("tempo").value = String(bpm);
-  $("bpmOut").textContent = String(bpm);
 
   for (const b of document.querySelectorAll<HTMLButtonElement>("#handSel button")) {
     b.disabled = !p.hasLeft && b.dataset.hand !== "right";
   }
-  $("handHint").classList.toggle("hidden", p.hasLeft);
+  show("handHint", !p.hasLeft);
 
   setSegment("modeSel", "mode", prefs.mode);
   setSegment("judgeSel", "judge", prefs.aTempo ? "tempo" : "wait");
   setSegment("handSel", "hand", effectiveHand());
   $("modeHelp").textContent = MODE_HELP[prefs.mode];
   $("judgeHelp").textContent = prefs.aTempo ? JUDGE_HELP.tempo : JUDGE_HELP.wait;
-  // The tempo matters whenever a clock is involved: demo playback, the
-  // metronome, or a-tempo grading.
-  $("tempoField").classList.toggle(
-    "hidden",
-    !(prefs.mode === "demo" || prefs.aTempo || prefs.metronome),
-  );
+  $<HTMLInputElement>("tempo").value = String(bpm);
+  $("bpmOut").textContent = String(bpm);
+  syncTempoField();
+  updateHandPosition();
   updateFitHint();
   openSheet("setup");
 }
 
 function effectiveHand(): HandChoice {
   return piece?.hasLeft ? prefs.hand : "right";
+}
+
+/** The tempo only matters where a clock is involved. */
+function syncTempoField(): void {
+  show("tempoField", prefs.mode === "demo" || prefs.aTempo || prefs.metronome);
+}
+
+function updateHandPosition(): void {
+  const text = piece ? handPositionText(piece.startPosition, piece.sharps, effectiveHand()) : null;
+  show("setupHands", text !== null);
+  if (text) $("setupHands").textContent = text;
 }
 
 function updateFitHint(): void {
@@ -641,37 +396,29 @@ function setSegment(containerId: string, dataKey: string, value: string): void {
 
 for (const b of document.querySelectorAll<HTMLButtonElement>("#modeSel button")) {
   b.addEventListener("click", () => {
-    prefs = { ...prefs, mode: b.dataset.mode as PracticeMode };
-    savePrefs(prefs);
+    setPrefs({ mode: b.dataset.mode as PracticeMode });
     setSegment("modeSel", "mode", prefs.mode);
     $("modeHelp").textContent = MODE_HELP[prefs.mode];
-    $("tempoField").classList.toggle(
-      "hidden",
-      !(prefs.mode === "demo" || prefs.aTempo || prefs.metronome),
-    );
+    syncTempoField();
     updateFitHint();
   });
 }
 
 for (const b of document.querySelectorAll<HTMLButtonElement>("#judgeSel button")) {
   b.addEventListener("click", () => {
-    prefs = { ...prefs, aTempo: b.dataset.judge === "tempo" };
-    savePrefs(prefs);
+    setPrefs({ aTempo: b.dataset.judge === "tempo" });
     setSegment("judgeSel", "judge", prefs.aTempo ? "tempo" : "wait");
     $("judgeHelp").textContent = prefs.aTempo ? JUDGE_HELP.tempo : JUDGE_HELP.wait;
-    $("tempoField").classList.toggle(
-      "hidden",
-      !(prefs.mode === "demo" || prefs.aTempo || prefs.metronome),
-    );
+    syncTempoField();
   });
 }
 
 for (const b of document.querySelectorAll<HTMLButtonElement>("#handSel button")) {
   b.addEventListener("click", () => {
     if (b.disabled) return;
-    prefs = { ...prefs, hand: b.dataset.hand as HandChoice };
-    savePrefs(prefs);
+    setPrefs({ hand: b.dataset.hand as HandChoice });
     setSegment("handSel", "hand", prefs.hand);
+    updateHandPosition();
     updateFitHint();
   });
 }
@@ -695,10 +442,22 @@ function restrictToLoop(score: Score, loop: { from: number; to: number } | null)
   return events.length > 0 ? { ...score, events } : score;
 }
 
+/** The hand the learner is *not* playing, for the app to sound. */
+function otherHandNotes(hand: HandChoice): Array<{ midi: number; onset: number; offset: number }> {
+  if (!piece || !prefs.accompany || hand === "both" || !piece.hasLeft) return [];
+  const other: HandChoice = hand === "right" ? "left" : "right";
+  return restrictToLoop(piece.score(other), loopBars).events.map((e) => ({
+    midi: e.pitchMidi,
+    onset: e.onset,
+    offset: e.offset,
+  }));
+}
+
 async function startPractice(): Promise<void> {
   if (!piece) return;
   closeSheet("setup");
   closeSheet("result");
+  closeSheet("report");
   stopPractice();
 
   // Inside the tap handler's task: iOS only unlocks audio from a user gesture.
@@ -715,6 +474,7 @@ async function startPractice(): Promise<void> {
     aTempo: prefs.aTempo,
     metronome: prefs.metronome,
     beatsPerBar: (piece.beats * 4) / piece.beatType,
+    accompany: otherHandNotes(hand),
     modelUrl: MODEL_URL,
     workerUrl: WORKER_URL,
     hooks: { onProgress, onJudge, onStatus, onFinish },
@@ -750,37 +510,67 @@ async function startPractice(): Promise<void> {
   keyboard.releaseAll();
 
   $("playTitle").textContent = piece.title;
-  $("playMeta").textContent =
-    `${piece.composer} · ${HAND_LABEL[hand]}` +
-    (prefs.aTempo || prefs.mode === "demo" ? ` · ${bpm} ppm` : "") +
-    (loopBars ? ` · bucle ${loopBars.from}–${loopBars.to}` : "");
+  $("playMeta").textContent = playMetaText(hand);
+  $("staff").setAttribute("aria-label", `${piece.title}, ${HAND_LABEL[hand]}`);
   setProgressBar(0);
-  $("library").classList.add("hidden");
-  $("play").classList.remove("hidden");
+  show("library", false);
+  show("play", true);
   applyStand();
   syncKeyboardVisibility();
   keyboard.relayout();
-  $("standLoop").setAttribute("aria-pressed", String(loopBars !== null));
+  syncPauseButton();
+  $("ctrlLoop").setAttribute("aria-pressed", String(loopBars !== null));
   // Hands on the keys means nothing will tap the screen for twenty minutes.
   void awake.acquire();
   streak = 0;
   bestStreak = 0;
   showStreak(0);
+  showHandPositionCue(hand);
 
   try {
     if (prefs.countIn) await countIn(bpm);
     if (!runner) return; // the learner left during the count-in
+    clock.start(now());
     await runner.start();
   } catch (e) {
     setCueMessage((e as Error).message || "No se pudo iniciar", true);
   }
 }
 
+function playMetaText(hand: HandChoice): string {
+  const step = sessionStep >= 0 ? `Paso ${sessionStep + 1}/${sessionPlan.length} · ` : "";
+  return (
+    step +
+    `${piece?.composer} · ${HAND_LABEL[hand]}` +
+    // Say it when the app is sounding the other hand: otherwise the first
+    // unexplained note that is not yours is confusing rather than helpful.
+    (runner?.accompanying ? " + la app" : "") +
+    (prefs.aTempo || prefs.mode === "demo" ? ` · ${bpm} ppm` : "") +
+    (loopBars ? ` · bucle ${loopBars.from}–${loopBars.to}` : "")
+  );
+}
+
+/**
+ * Light the five keys the hand starts on, and say so, before the first note.
+ *
+ * Only where there is a keyboard to light: at a real piano the sentence is the
+ * whole message, and it is already on the setup sheet the learner just left.
+ */
+function showHandPositionCue(hand: HandChoice): void {
+  const text = piece ? handPositionText(piece.startPosition, piece.sharps, hand) : null;
+  if (!text) return;
+  setCueMessage(text);
+  cueHeldUntil = Date.now() + 2500;
+  const anchor = hand === "left" ? piece?.startPosition?.left : piece?.startPosition?.right;
+  if (anchor !== undefined && !prefs.stand && prefs.mode === "keys") {
+    keyboard.setGuide(fiveFingerSpan(anchor));
+    window.setTimeout(() => keyboard.setGuide([]), 3000);
+  }
+}
+
 /** Fingering for a note, looked up on the score that produced it. */
 function fingerAt(score: Score, onset: number, midi: number): number | undefined {
-  return score.events.find(
-    (e) => e.pitchMidi === midi && Math.abs(e.onset - onset) < 1e-6,
-  )?.finger;
+  return score.events.find((e) => e.pitchMidi === midi && Math.abs(e.onset - onset) < 1e-6)?.finger;
 }
 
 function delay(ms: number): Promise<void> {
@@ -794,11 +584,11 @@ function setProgressBar(fraction: number): void {
 }
 
 async function countIn(tempo: number): Promise<void> {
-  const el = $("countdown");
-  const digit = el.querySelector("span");
+  const box = $("countdown");
+  const digit = box.querySelector("span");
   if (!digit) return;
   const beatMs = Math.min(900, Math.max(320, 60000 / tempo));
-  el.classList.remove("hidden");
+  box.classList.remove("hidden");
   for (const n of [3, 2, 1]) {
     digit.textContent = String(n);
     digit.style.animation = "none";
@@ -808,20 +598,20 @@ async function countIn(tempo: number): Promise<void> {
     await delay(beatMs);
     if ($("play").classList.contains("hidden")) break;
   }
-  el.classList.add("hidden");
+  box.classList.add("hidden");
 }
 
 function showStreak(count: number): void {
-  const el = $("streak");
+  const box = $("streak");
   if (count < 3) {
-    el.classList.remove("on");
+    box.classList.remove("on");
     return;
   }
   $("streakCount").textContent = String(count);
-  el.classList.add("on");
-  el.classList.remove("pop");
-  void el.offsetWidth;
-  el.classList.add("pop");
+  box.classList.add("on");
+  box.classList.remove("pop");
+  void box.offsetWidth;
+  box.classList.add("pop");
 }
 
 function vibrate(ms: number): void {
@@ -837,11 +627,24 @@ function onProgress(p: {
   expected: number[];
 }): void {
   staff.setProgress(p.doneIndex, p.positionBeats);
+  if (p.measure !== currentMeasure) describeStaff(p.measure);
   currentMeasure = p.measure;
   expectedNow = p.expected;
   keyboard.setHighlight(p.expected);
   setProgressBar(p.total ? p.doneIndex / p.total : 0);
   if (prefs.mode !== "demo") renderCue();
+}
+
+/**
+ * Keep the canvas's text alternative current.
+ *
+ * A canvas is a blank rectangle to a screen reader. Between this and the live
+ * cue line, a blind learner has the two things the sighted one has: where they
+ * are in the piece, and which note is next.
+ */
+function describeStaff(measure: number): void {
+  if (!piece) return;
+  $("staff").setAttribute("aria-label", `${piece.title}. Compás ${measure} de ${piece.bars}.`);
 }
 
 function renderCue(): void {
@@ -889,7 +692,7 @@ function onJudge(event: { kind: string; playedMidi?: number; octaveOff?: number 
 
   if (event.playedMidi !== undefined) keyboard.flash(event.playedMidi, false);
   staff.flashWrong();
-  setCueMessage(wrongNoteMessage(event), true);
+  setCueMessage(wrongNoteMessage(event, !$("keyboard").classList.contains("hidden")), true);
   cueHeldUntil = Date.now() + 1200;
   streak = 0;
   showStreak(0);
@@ -897,45 +700,73 @@ function onJudge(event: { kind: string; playedMidi?: number; octaveOff?: number 
 }
 
 /**
- * What to say about a wrong note. Three genuinely different situations, and one
- * message for all of them would be wrong in two of them:
+ * A transient hint on the cue line.
  *
- *  - nothing was played and the deadline passed (a-tempo miss);
- *  - the right note in the wrong octave, which is a misplaced hand;
- *  - a wrong note — and only then is "look at the lit key" useful, and only when
- *    there is a keyboard on screen to look at.
+ * Dropped while a held message is showing. Status lines are ephemeral by design
+ * — the first cursor position replaces them a moment later — so the one thing
+ * they must not do is stamp on something the learner is still reading, which is
+ * exactly what "Toca las teclas marcadas" did to the hand-placement message it
+ * arrived one tick after.
  */
-function wrongNoteMessage(event: { playedMidi?: number; octaveOff?: number }): string {
-  if (event.playedMidi === undefined) return "Se te ha pasado esa nota";
-  if (event.octaveOff !== undefined) {
-    const octaves = Math.abs(event.octaveOff);
-    const where = event.octaveOff < 0 ? "más abajo" : "más arriba";
-    return `Nota correcta, pero ${plural(octaves, "una octava", "octavas")} ${where}`;
-  }
-  const hasKeyboard = !$("keyboard").classList.contains("hidden");
-  return hasKeyboard ? "Esa no… mira la tecla iluminada" : "Esa no era";
-}
-
 function onStatus(text: string): void {
+  if (cueHeldUntil > Date.now()) return;
   setCueMessage(text);
 }
 
-// --- loop ------------------------------------------------------------------
+// --- transport --------------------------------------------------------------
+
+function syncPauseButton(): void {
+  const paused = runner?.isPaused ?? false;
+  $("ctrlPause").setAttribute("aria-pressed", String(paused));
+  $("ctrlPauseLabel").textContent = paused ? "Seguir" : "Pausa";
+  $("ctrlPause").querySelector("i")!.innerHTML = icon(paused ? "play" : "pause", 20);
+}
+
+$("ctrlPause").addEventListener("click", () => {
+  if (!runner) return;
+  if (runner.isPaused) {
+    clock.start(now());
+    runner.resume();
+  } else {
+    clock.pause(now());
+    runner.pause();
+  }
+  syncPauseButton();
+});
+
 /**
  * Toggle a drill on the bars the student model rates weakest. A loop is run as a
  * piece in its own right — the score is restricted to those bars — which keeps the
  * follower, the staff and the progress bar honest with no special cases.
  */
-$("standLoop").addEventListener("click", () => {
+$("ctrlLoop").addEventListener("click", () => {
   if (loopBars) {
     loopBars = null;
   } else {
     const weak = runner?.weakestMeasures(3) ?? [];
-    const measure = weak.length > 0 ? weak : [currentMeasure];
-    loopBars = { from: Math.min(...measure), to: Math.max(...measure) };
+    const measures = weak.length > 0 ? weak : [currentMeasure];
+    loopBars = { from: Math.min(...measures), to: Math.max(...measures) };
   }
-  $("standLoop").setAttribute("aria-pressed", String(loopBars !== null));
+  $("ctrlLoop").setAttribute("aria-pressed", String(loopBars !== null));
   void startPractice();
+});
+
+$("ctrlRestart").addEventListener("click", () => void startPractice());
+$("ctrlStop").addEventListener("click", toLibrary);
+
+/**
+ * A backgrounded tab is not practice.
+ *
+ * Without this the minute counter would bank whatever happened while the phone
+ * was in a pocket, and the one number that is supposed to mean effort would mean
+ * nothing at all.
+ */
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    clock.pause(now());
+  } else if (!$("play").classList.contains("hidden") && !(runner?.isPaused ?? true)) {
+    clock.start(now());
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -945,6 +776,11 @@ function onFinish(summary: RunSummary): void {
   if (!piece) return;
   const judged = prefs.mode !== "demo";
   const stars = judged ? starsFor(recordRun(piece.id, summary)) : 0;
+  const seconds = clock.take(now());
+  clock.pause(now());
+  // A session step ends here and goes straight to the next one, never through
+  // the library, so this is where the session's own clock has to be fed.
+  if (sessionStep >= 0) sessionSeconds += seconds;
 
   staff.stop();
   keyboard.setHighlight([]);
@@ -960,120 +796,50 @@ function onFinish(summary: RunSummary): void {
     completed: summary.completed,
     judged,
     streak: bestStreak,
+    seconds,
   });
 
-  renderStars(stars);
-  $("resultTitle").textContent = judged
-    ? stars === 3
-      ? "¡Impecable!"
-      : summary.completed
-        ? "¡Pieza terminada!"
-        : "Buen intento"
-    : "Fin de la escucha";
-  $("resultLine").textContent = judged
-    ? loopBars
-      ? `Bucle de los compases ${loopBars.from}–${loopBars.to}.`
-      : "Repite para subir la puntuación, o pasa a la siguiente."
-    : "Ahora inténtalo tú: vuelve y elige «En la pantalla».";
+  const latency = runner?.latency;
+  const micLatencyMs = prefs.mode === "mic" && latency && latency.samples > 0 ? latency.p50 : null;
 
-  renderResultStats(judged, summary);
-  renderXp(judged, xp, after);
-  renderAdvice(judged, summary);
-  renderResultActions(stars, judged, summary);
+  renderResult({
+    summary,
+    judged,
+    stars,
+    bestStreak,
+    seconds,
+    loop: loopBars,
+    micLatencyMs,
+    latencyIsBad:
+      prefs.mode === "mic" &&
+      latency !== undefined &&
+      latency.samples > 5 &&
+      latencyVerdict(latency.p50) === "bad",
+    weakMeasures: runner?.weakestMeasures(3) ?? [],
+    xp,
+    stats: after,
+    actions: resultActions(stars, judged, summary),
+  });
 
+  recordSessionStep(stars, summary);
   openSheet("result");
   if (stars === 3) confetti($("result").querySelector<HTMLElement>(".sheet-card")!);
-
-  newlyUnlocked(before, after).forEach((a, i) =>
-    window.setTimeout(() => toastAchievement(a), 450 + i * 700),
-  );
+  announce(before, after);
 }
 
-function renderStars(stars: number): void {
-  const host = $("stars");
-  host.replaceChildren();
-  for (let i = 0; i < 3; i++) {
-    const star = document.createElement("span");
-    star.className = i < stars ? "won" : "off";
-    star.innerHTML = icon("star", 30);
-    host.append(star);
-  }
-}
-
-function renderResultStats(judged: boolean, summary: RunSummary): void {
-  const stats = $("resultStats");
-  stats.replaceChildren();
-  if (!judged) return;
-  const cells: Array<[string, string]> = [
-    ["Notas", String(summary.correct)],
-    ["Acierto", `${Math.round(summary.accuracy * 100)}%`],
-  ];
-  // Timing only means something when a clock was grading; in wait mode the
-  // follower deliberately forgives it, so showing a figure would be a lie.
-  if (summary.meanTimingErrorSec !== null) {
-    cells.push(["Desfase", `${Math.round(summary.meanTimingErrorSec * 1000)} ms`]);
-  } else {
-    cells.push(["Racha", String(bestStreak)]);
-  }
-  const latency = runner?.latency;
-  if (prefs.mode === "mic" && latency && latency.samples > 0) {
-    cells.push(["Retardo", `${latency.p50} ms`]);
-  }
-  for (const [label, value] of cells) {
-    const cell = document.createElement("div");
-    cell.append(el("dd", "", value), el("dt", "", label));
-    stats.append(cell);
-  }
-}
-
-function renderXp(judged: boolean, xp: number, after: Stats): void {
-  const row = $("resultXp");
-  row.classList.toggle("hidden", !judged || xp === 0);
-  if (!judged || xp === 0) return;
-  const state = levelFor(after.xp);
-  $("resultXpText").textContent = `+${xp} XP`;
-  $("resultLevelText").textContent = `Nivel ${state.level} · ${state.into}/${state.need}`;
-  const bar = $<HTMLElement>("resultXpBar");
-  bar.style.transition = "none";
-  bar.style.width = "0%";
-  void bar.offsetWidth;
-  bar.style.transition = "";
-  window.setTimeout(() => {
-    bar.style.width = `${(state.into / state.need) * 100}%`;
-  }, 260);
-}
-
-function renderAdvice(judged: boolean, summary: RunSummary): void {
-  const advice = $("resultAdvice");
-  const measures = runner?.weakestMeasures(3) ?? [];
-  const latency = runner?.latency;
-  // A microphone run that is visibly behind the hands is a setup problem, not a
-  // playing problem, and saying "practise bar 5" would be blaming the learner.
-  if (prefs.mode === "mic" && latency && latency.samples > 5 && latencyVerdict(latency.p50) === "bad") {
-    advice.classList.remove("hidden");
-    advice.textContent =
-      `El cursor va ${latency.p50} ms por detrás de tus manos. Prueba con una sola mano ` +
-      "o acerca el móvil al piano: así el sonido llega más limpio y la detección es más rápida.";
-    return;
-  }
-  if (!judged || summary.accuracy >= 0.98 || measures.length === 0) {
-    advice.classList.add("hidden");
-    return;
-  }
-  advice.classList.remove("hidden");
-  advice.textContent =
-    measures.length === 1
-      ? `Repasa el compás ${measures[0]} antes de volver a tocarla entera.`
-      : `Repasa los compases ${measures.join(", ")} antes de volver a tocarla entera.`;
-}
-
-function renderResultActions(stars: number, judged: boolean, summary: RunSummary): void {
-  const host = $("resultActions");
-  host.replaceChildren();
+function resultActions(stars: number, judged: boolean, summary: RunSummary): HTMLElement[] {
+  const actions: HTMLElement[] = [];
 
   // A guided session drives the order: its next step is the primary action.
-  if (sessionStep >= 0 && sessionStep + 1 < sessionPlan.length) {
-    host.append(button("btn btn-primary", "Siguiente paso de la sesión", () => runSessionStep(sessionStep + 1)));
+  const moreSteps = sessionStep >= 0 && sessionStep + 1 < sessionPlan.length;
+  if (moreSteps) {
+    actions.push(
+      button("btn btn-primary", "Siguiente paso de la sesión", () =>
+        runSessionStep(sessionStep + 1),
+      ),
+    );
+  } else if (sessionStep >= 0) {
+    actions.push(button("btn btn-primary", "Ver el resumen de la sesión", finishSession));
   }
 
   const clean = judged && summary.completed && summary.accuracy >= 0.95;
@@ -1082,7 +848,7 @@ function renderResultActions(stars: number, judged: boolean, summary: RunSummary
   // effect on anything.
   if (clean && (prefs.aTempo || prefs.metronome || prefs.mode === "demo")) {
     const faster = Math.round(bpm * 1.1);
-    host.append(
+    actions.push(
       button("btn btn-outline", `Súbelo a ${faster} ppm`, () => {
         bpm = faster;
         void startPractice();
@@ -1094,7 +860,7 @@ function renderResultActions(stars: number, judged: boolean, summary: RunSummary
   if (judged && !loopBars && weak.length > 0 && summary.accuracy < 0.95) {
     const from = Math.min(...weak);
     const to = Math.max(...weak);
-    host.append(
+    actions.push(
       button("btn btn-outline", `Practicar los compases ${from}–${to}`, () => {
         loopBars = { from, to };
         void startPractice();
@@ -1102,7 +868,7 @@ function renderResultActions(stars: number, judged: boolean, summary: RunSummary
     );
   }
   if (loopBars) {
-    host.append(
+    actions.push(
       button("btn btn-outline", "Tocarla entera", () => {
         loopBars = null;
         void startPractice();
@@ -1113,37 +879,38 @@ function renderResultActions(stars: number, judged: boolean, summary: RunSummary
   const next = nextPiece();
   const advance = judged && stars === 3 && next !== null && sessionStep < 0;
   const again = button(
-    advance || host.children.length > 0 ? "btn btn-outline" : "btn btn-primary",
+    advance || actions.length > 0 ? "btn btn-outline" : "btn btn-primary",
     judged ? "Otra vez" : "Escuchar otra vez",
     () => void startPractice(),
   );
   if (advance) {
-    host.prepend(button("btn btn-primary", "Siguiente pieza", () => openNext(next!)));
-    host.append(again);
+    actions.unshift(button("btn btn-primary", "Siguiente pieza", () => openNext(next!)));
+    actions.push(again);
   } else {
-    host.append(again);
-    if (next) host.append(button("btn btn-outline", "Siguiente pieza", () => openNext(next)));
+    actions.push(again);
+    if (next && sessionStep < 0) {
+      actions.push(button("btn btn-outline", "Siguiente pieza", () => openNext(next)));
+    }
   }
-  host.append(button("btn btn-quiet", "Volver a la biblioteca", toLibrary));
-}
-
-function button(className: string, label: string, onClick: () => void): HTMLButtonElement {
-  const btn = document.createElement("button");
-  btn.className = className;
-  btn.textContent = label;
-  btn.addEventListener("click", onClick);
-  return btn;
+  actions.push(button("btn btn-quiet", "Volver a la biblioteca", toLibrary));
+  return actions;
 }
 
 function openNext(target: Piece): void {
   closeSheet("result");
   stopPractice();
-  $("play").classList.add("hidden");
-  $("library").classList.remove("hidden");
-  renderLibrary();
+  show("play", false);
+  show("library", true);
+  refreshLibrary();
   openSetup(target);
 }
 
+/**
+ * The next piece in the curriculum.
+ *
+ * Looked up in `SONGS` rather than in everything playable, so finishing a warm-up
+ * or an imported score never offers "the next one" out of a list it is not in.
+ */
 function nextPiece(): Piece | null {
   if (!piece || piece.imported) return null;
   const i = SONGS.findIndex((s) => s.id === piece?.id);
@@ -1163,21 +930,17 @@ $("sessionBtn").addEventListener("click", () => {
   }
   sessionPlan = planSession({ stars, lastPlayed, weakBars: runner?.weakestMeasures(3) ?? [] });
   sessionStep = -1;
+  sessionResults = [];
 
   const list = $("sessionList");
   list.replaceChildren();
   sessionPlan.forEach((step, i) => {
     const row = document.createElement("div");
     row.className = "ach";
-    row.append(
-      el("span", "card-index", String(i + 1)),
-      (() => {
-        const body = document.createElement("span");
-        body.className = "ach-body";
-        body.append(el("b", "", step.title), el("small", "", step.detail));
-        return body;
-      })(),
-    );
+    const body = document.createElement("span");
+    body.className = "ach-body";
+    body.append(el("b", "", step.title), el("small", "", step.detail));
+    row.append(el("span", "card-index", String(i + 1)), body);
     list.append(row);
   });
   openSheet("session");
@@ -1187,20 +950,61 @@ $("sessionStart").addEventListener("click", () => runSessionStep(0));
 $("sessionCancel").addEventListener("click", () => {
   sessionPlan = [];
   sessionStep = -1;
+  sessionResults = [];
   closeSheet("session");
 });
+// Nothing else to do here: the library is already behind the sheet.
+$("reportDone").addEventListener("click", () => closeSheet("report"));
 
 function runSessionStep(index: number): void {
   closeSheet("session");
   closeSheet("result");
   const step = sessionPlan[index];
   if (!step) {
-    sessionStep = -1;
-    toLibrary();
+    finishSession();
     return;
   }
   sessionStep = index;
   openSetup(pieceFromSong(step.song), step.loop);
+}
+
+/** Remember how a session step went, so the summary can be honest about it. */
+function recordSessionStep(stars: number, summary: RunSummary): void {
+  const step = sessionPlan[sessionStep];
+  if (!step) return;
+  sessionResults[sessionStep] = {
+    title: step.title,
+    songTitle: step.song.title,
+    stars,
+    correct: summary.correct,
+    completed: summary.completed,
+  };
+}
+
+/**
+ * End the session and say what happened.
+ *
+ * The plan is announced up front, so it has to be accounted for at the end —
+ * otherwise the app asks for ten minutes of trust and never reports back. There
+ * is one way out, `toLibrary`, so that walking away mid-session ends it too: the
+ * previous version left `sessionStep` pointing at a plan nobody was following,
+ * and the next piece finished from the library was filed as a step of it.
+ */
+function finishSession(): void {
+  closeSheet("result");
+  toLibrary();
+}
+
+/** Clear the session and return its report, if it got far enough to have one. */
+function takeSessionReport(): SessionReport | null {
+  const results = sessionResults.filter(Boolean);
+  const seconds = sessionSeconds;
+  const planned = sessionPlan.length;
+  sessionPlan = [];
+  sessionStep = -1;
+  sessionResults = [];
+  sessionSeconds = 0;
+  return results.length > 0 ? summariseSession(results, seconds, planned) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1214,27 +1018,27 @@ $("importFile").addEventListener("change", () => {
   if (!file) return;
   void (async () => {
     try {
-      if (/\.mxl$/i.test(file.name)) {
-        // .mxl is a zip; unzipping it would mean shipping an archive library for
-        // a case the learner can avoid by exporting uncompressed MusicXML.
-        throw new Error("Exporta la partitura como .musicxml sin comprimir");
-      }
-      const xml = await file.text();
+      // `.mxl` is what MuseScore, Sibelius and Finale export by default, so it
+      // is the first thing a real user brings; see `mxl.ts`.
+      const xml = isCompressedMusicXML(file.name)
+        ? await readMxl(await file.arrayBuffer())
+        : await file.text();
       addImported(file.name.replace(/\.[^.]+$/, ""), xml);
-      renderLibrary();
-      $("importBtn").querySelector("span")!.textContent = "Importada";
-      window.setTimeout(() => {
-        $("importBtn").querySelector("span")!.textContent = "Importar partitura";
-      }, 2500);
+      refreshLibrary();
+      flashImportLabel("Importada", 2500);
     } catch (err) {
-      $("importBtn").querySelector("span")!.textContent =
-        (err as Error).message || "No se pudo leer";
-      window.setTimeout(() => {
-        $("importBtn").querySelector("span")!.textContent = "Importar partitura";
-      }, 3500);
+      flashImportLabel((err as Error).message || "No se pudo leer", 3500);
     }
   })();
 });
+
+function flashImportLabel(text: string, ms: number): void {
+  const label = $("importBtn").querySelector("span")!;
+  label.textContent = text;
+  window.setTimeout(() => {
+    label.textContent = "Importar partitura";
+  }, ms);
+}
 
 // ---------------------------------------------------------------------------
 // Navigation
@@ -1245,22 +1049,39 @@ function stopPractice(): void {
   staff.stop();
   keyboard.releaseAll();
   keyboard.setHighlight([]);
+  keyboard.setGuide([]);
   synth.allOff();
 }
 
 function toLibrary(): void {
+  // Bank whatever was practised before walking away: most practice ends this
+  // way, not with a finished piece, and only counting completions would
+  // undercount exactly the sessions spent grinding four bars.
+  const seconds = clock.take(now());
+  clock.pause(now());
+  if (seconds >= 1) {
+    sessionSeconds += seconds;
+    const { before, after } = bankPracticeSeconds(seconds);
+    announce(before, after);
+  }
+
+  const report = takeSessionReport();
+
   stopPractice();
   closeSheet("result");
-  $("play").classList.add("hidden");
-  $("library").classList.remove("hidden");
+  show("play", false);
+  show("library", true);
   void awake.release();
   updateRotateHint();
-  renderLibrary();
+  refreshLibrary();
+
+  if (report) {
+    renderSessionReport(report.headline, report.lines, report.notes);
+    openSheet("report");
+  }
 }
 
 $("back").addEventListener("click", toLibrary);
-$("standRestart").addEventListener("click", () => void startPractice());
-$("standStop").addEventListener("click", toLibrary);
 
 function syncNamesButton(): void {
   $("namesBtn").setAttribute("aria-pressed", String(prefs.showNames));
@@ -1268,8 +1089,7 @@ function syncNamesButton(): void {
 }
 
 $("namesBtn").addEventListener("click", () => {
-  prefs = { ...prefs, showNames: !prefs.showNames };
-  savePrefs(prefs);
+  setPrefs({ showNames: !prefs.showNames });
   syncNamesButton();
   staff.setShowNames(prefs.showNames);
   keyboard.setNames(prefs.showNames);
@@ -1281,7 +1101,7 @@ $("namesBtn").addEventListener("click", () => {
 syncNamesButton();
 applyStand();
 keyboard.setNames(prefs.showNames);
-renderLibrary();
+refreshLibrary();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {

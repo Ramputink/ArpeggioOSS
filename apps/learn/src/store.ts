@@ -49,6 +49,14 @@ export interface Prefs {
    * the learner. The honest mode for rhythm, and the one to graduate to.
    */
   aTempo: boolean;
+  /**
+   * Let the app sound the hand the learner is not playing.
+   *
+   * On by default: practising one hand in silence is practising without the part
+   * that makes it music. Ignored in microphone mode, where the speaker feeds
+   * back into the microphone (see `accompanist.ts`).
+   */
+  accompany: boolean;
 }
 
 const DEFAULT_PREFS: Prefs = {
@@ -63,6 +71,7 @@ const DEFAULT_PREFS: Prefs = {
   metronome: false,
   pageView: false,
   aTempo: false,
+  accompany: true,
 };
 
 function read<T>(key: string, fallback: T): T {
@@ -156,6 +165,8 @@ export interface RunContext extends RunOutcome {
   hand: HandChoice;
   /** Longest streak of correct notes within this run. */
   streak: number;
+  /** Practice seconds accumulated since the last time they were banked. */
+  seconds: number;
 }
 
 /**
@@ -167,18 +178,35 @@ export function applyRun(run: RunContext): { before: Stats; after: Stats; xp: nu
   const xp = xpForRun(run);
   const after: Stats = {
     notes: before.notes + (run.judged ? run.correct : 0),
-    songs: run.completed && run.judged
-      ? [...new Set([...before.songs, run.songId])]
-      : before.songs,
+    songs: run.completed && run.judged ? [...new Set([...before.songs, run.songId])] : before.songs,
     perfect: before.perfect + (run.judged && run.completed && run.wrong === 0 ? 1 : 0),
     bestStreak: Math.max(before.bestStreak, run.judged ? run.streak : 0),
     xp: before.xp + xp,
     days: [...new Set([...before.days, todayKey()])],
     modes: [...new Set([...before.modes, run.mode])],
     hands: run.completed ? [...new Set([...before.hands, run.hand])] : before.hands,
+    // Time counts whatever the mode: listening to a piece with the score in
+    // front of you is practice, even though it earns no XP.
+    seconds: before.seconds + Math.max(0, Math.round(run.seconds)),
   };
   saveStats(after);
   return { before, after, xp };
+}
+
+/**
+ * Bank practice time that did not end in a result screen.
+ *
+ * Most practice ends by walking away, not by finishing a piece, so counting
+ * minutes only on completion would undercount the very sessions that matter —
+ * the ones spent grinding four bars. Returns both snapshots so the caller can
+ * still announce an achievement crossed on the way out.
+ */
+export function bankPracticeSeconds(seconds: number): { before: Stats; after: Stats } {
+  const before = loadStats();
+  if (seconds < 1) return { before, after: before };
+  const after: Stats = { ...before, seconds: before.seconds + Math.round(seconds) };
+  saveStats(after);
+  return { before, after };
 }
 
 /** Wipe everything the app has stored about the learner (kept out of prefs). */

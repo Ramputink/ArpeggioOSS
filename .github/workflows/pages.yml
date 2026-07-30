@@ -33,6 +33,10 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      # Lint and formatting run before the build: they are the fastest checks and
+      # the ones a long editing session drifts on.
+      - run: npm run lint
+      - run: npm run format:check
       - run: npm run build
       - run: npm test
       - uses: actions/upload-pages-artifact@v3

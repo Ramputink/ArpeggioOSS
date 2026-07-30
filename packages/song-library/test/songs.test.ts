@@ -12,17 +12,21 @@ import test from "node:test";
 import { parseMusicXML } from "@arpeggio/musicxml-parser";
 
 import {
+  EXERCISES,
+  EXERCISE_SPECS,
   LEVEL_GOALS,
   LEVEL_NAMES,
   SONGS,
   beatsPerBar,
   diatonicIndex,
+  exerciseById,
   parseVoice,
   pitchToMidi,
   songById,
   songToMusicXML,
   songToScore,
 } from "../src/index.js";
+import type { HandChoice } from "../src/index.js";
 
 const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);
 
@@ -43,14 +47,19 @@ test("diatonicIndex puts enharmonics on the right staff line", () => {
 
 test("parseVoice rejects a bar that does not fill the time signature", () => {
   assert.throws(
-    () => parseVoice("C4 C4 C4 | C4 C4 C4 C4", { hand: "right", staff: 1, voice: 1, beatsPerBar: 4 }),
+    () =>
+      parseVoice("C4 C4 C4 | C4 C4 C4 C4", { hand: "right", staff: 1, voice: 1, beatsPerBar: 4 }),
     /bar 1 has 3 beats, expected 4/,
   );
 });
 
 test("parseVoice honours a pickup bar and keeps measure numbers", () => {
   const v = parseVoice("G4 | C4 C4 C4 C4 |", {
-    hand: "right", staff: 1, voice: 1, beatsPerBar: 4, pickupBeats: 1,
+    hand: "right",
+    staff: 1,
+    voice: 1,
+    beatsPerBar: 4,
+    pickupBeats: 1,
   });
   assert.equal(v.bars, 2);
   assert.equal(v.events[0].measure, 1);
@@ -62,8 +71,14 @@ test("parseVoice honours a pickup bar and keeps measure numbers", () => {
 test("parseVoice expands chords onto one onset", () => {
   const v = parseVoice("C3+E3+G3:4 |", { hand: "left", staff: 2, voice: 2, beatsPerBar: 4 });
   assert.equal(v.events.length, 3);
-  assert.deepEqual(v.events.map((e) => e.onset), [0, 0, 0]);
-  assert.deepEqual(v.events.map((e) => e.pitchMidi), [48, 52, 55]);
+  assert.deepEqual(
+    v.events.map((e) => e.onset),
+    [0, 0, 0],
+  );
+  assert.deepEqual(
+    v.events.map((e) => e.pitchMidi),
+    [48, 52, 55],
+  );
 });
 
 test("the library is a well-formed, progressive curriculum", () => {
@@ -75,7 +90,10 @@ test("the library is a well-formed, progressive curriculum", () => {
   }
   // Every tier that has a name must have at least one piece in it.
   for (const level of [1, 2, 3, 4, 5, 6] as const) {
-    assert.ok(SONGS.some((s) => s.level === level), `level ${level} is empty`);
+    assert.ok(
+      SONGS.some((s) => s.level === level),
+      `level ${level} is empty`,
+    );
     assert.ok(LEVEL_GOALS[level].length > 20, `level ${level} has no stated goal`);
   }
   for (const song of SONGS) {
@@ -132,8 +150,20 @@ test("level 1 songs stay on white keys within reach of one hand position", () =>
 test("both hands of a song cover the same span of bars", () => {
   for (const song of SONGS.filter((s) => s.left)) {
     const perBar = beatsPerBar(song);
-    const r = parseVoice(song.right, { hand: "right", staff: 1, voice: 1, beatsPerBar: perBar, pickupBeats: song.pickupBeats });
-    const l = parseVoice(song.left!, { hand: "left", staff: 2, voice: 2, beatsPerBar: perBar, pickupBeats: song.pickupBeats });
+    const r = parseVoice(song.right, {
+      hand: "right",
+      staff: 1,
+      voice: 1,
+      beatsPerBar: perBar,
+      pickupBeats: song.pickupBeats,
+    });
+    const l = parseVoice(song.left!, {
+      hand: "left",
+      staff: 2,
+      voice: 2,
+      beatsPerBar: perBar,
+      pickupBeats: song.pickupBeats,
+    });
     assert.equal(r.bars, l.bars, `${song.id}: hands have a different number of bars`);
     // Tolerance, not equality: a bar of triplets sums to 4 only to within
     // double-precision rounding, and that is fine — it is far below a tick.
@@ -152,6 +182,121 @@ test("songs round-trip through MusicXML with identical pitches and onsets", () =
       viaXml.events.map((e) => [e.pitchMidi, round(e.onset), round(e.offset)]),
       direct.events.map((e) => [e.pitchMidi, round(e.onset), round(e.offset)]),
       `${song.id}: MusicXML export does not match the compiled score`,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Fingering and hand positions
+// ---------------------------------------------------------------------------
+
+test("every note of every piece carries a finger", () => {
+  // Fingering is the difference between "play a G" and an instruction a hand
+  // can follow. A piece that loses its digits in an edit fails here rather than
+  // teaching someone a fingering they will have to unlearn.
+  for (const song of [...SONGS, ...EXERCISES]) {
+    for (const e of songToScore(song).events) {
+      assert.ok(
+        e.finger !== undefined && e.finger >= 1 && e.finger <= 5,
+        `${song.id}: note ${e.pitchMidi} at beat ${e.onset} has no usable finger`,
+      );
+    }
+  }
+});
+
+test("a declared start position is a note the hand really plays, and its opening bar fits the hand", () => {
+  for (const song of [...SONGS, ...EXERCISES]) {
+    for (const hand of ["right", "left"] as const) {
+      const anchor = song.startPosition?.[hand];
+      if (anchor === undefined) continue;
+      const events = songToScore(song, hand).events;
+      assert.ok(events.length > 0, `${song.id}: ${hand} position declared but the hand is silent`);
+      assert.ok(
+        events.some((e) => e.pitchMidi === anchor),
+        `${song.id}: ${hand} position ${anchor} is never played`,
+      );
+      // The opening bar must sit under the hand from that anchor: an octave is
+      // the widest a hand covers, and anything below the anchor means the hand
+      // was placed too high to reach its own first phrase.
+      const firstBar = events.filter((e) => e.measure === events[0].measure);
+      for (const e of firstBar) {
+        assert.ok(
+          e.pitchMidi >= anchor && e.pitchMidi <= anchor + 12,
+          `${song.id}: ${hand} starts at ${anchor} but bar ${e.measure} needs ${e.pitchMidi}`,
+        );
+      }
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Generated exercises
+// ---------------------------------------------------------------------------
+
+test("generated exercises are playable songs, and are not repertoire", () => {
+  assert.equal(EXERCISES.length, EXERCISE_SPECS.length);
+  const songIds = new Set(SONGS.map((s) => s.id));
+  for (const ex of EXERCISES) {
+    assert.ok(!songIds.has(ex.id), `${ex.id}: an exercise must not shadow a piece`);
+    assert.equal(exerciseById(ex.id), ex);
+    assert.ok(ex.tip.length > 20, `${ex.id}: tip too short to help`);
+    // Compiling is the real check: `parseVoice` validates every bar against the
+    // time signature, so a generator that emits a wrong duration throws here.
+    const score = songToScore(ex);
+    assert.ok(score.events.length >= 8, `${ex.id}: suspiciously short`);
+    for (const e of score.events) {
+      assert.ok(e.pitchMidi >= 21 && e.pitchMidi <= 108, `${ex.id}: pitch off the keyboard`);
+    }
+  }
+});
+
+test("a five-finger exercise really does stay under five fingers", () => {
+  for (const spec of EXERCISE_SPECS.filter((s) => s.kind === "five-finger")) {
+    const ex = exerciseById(spec.id)!;
+    for (const hand of ["right", "left"] as HandChoice[]) {
+      const midis = songToScore(ex, hand).events.map((e) => e.pitchMidi);
+      // A five-finger position spans a perfect fifth: seven semitones, no more.
+      assert.equal(
+        Math.max(...midis) - Math.min(...midis),
+        7,
+        `${spec.id}: ${hand} is not a fifth`,
+      );
+      assert.equal(new Set(midis).size, 5, `${spec.id}: ${hand} uses more than five keys`);
+    }
+  }
+});
+
+test("exercises are spelled for their key", () => {
+  // A flat key must not print sharps: FA mayor contains SI♭, never LA♯.
+  const fMajor = exerciseById("ex-five-f")!;
+  assert.ok(fMajor.right.includes("Bb"), "F major five-finger must spell B flat");
+  assert.ok(!fMajor.right.includes("A#"), "F major must not spell A sharp");
+  const dMajor = exerciseById("ex-five-d")!;
+  assert.ok(dMajor.right.includes("F#"), "D major five-finger must spell F sharp");
+});
+
+test("the exercise catalogue covers each kind of technique", () => {
+  const kinds = new Set(EXERCISE_SPECS.map((s) => s.kind));
+  for (const kind of ["five-finger", "contrary", "broken-chord", "scale"] as const) {
+    assert.ok(kinds.has(kind), `no ${kind} exercise is offered`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Key signatures
+// ---------------------------------------------------------------------------
+
+test("a song's key signature survives the trip through MusicXML", () => {
+  for (const song of SONGS) {
+    assert.deepEqual(
+      songToScore(song).keySignatures,
+      [{ measure: 1, fifths: song.sharps }],
+      `${song.id}: compiled score lost its key`,
+    );
+    assert.equal(
+      parseMusicXML(songToMusicXML(song)).keySignatures[0]?.fifths,
+      song.sharps,
+      `${song.id}: MusicXML export lost its key`,
     );
   }
 });

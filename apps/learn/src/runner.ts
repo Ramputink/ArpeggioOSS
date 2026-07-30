@@ -28,6 +28,7 @@ import {
 } from "@arpeggio/practice-engine";
 import { LivePractice, MicSource } from "@arpeggio/practice-web";
 
+import { Accompanist, type AccompanyNote } from "./accompanist.js";
 import { ATempoJudge } from "./aTempo.js";
 import { LatencyMeter, MeteredSource, type LatencyStats } from "./latency.js";
 import { Metronome } from "./metronome.js";
@@ -69,6 +70,13 @@ export interface RunnerOptions {
   aTempo?: boolean;
   metronome?: boolean;
   beatsPerBar?: number;
+  /**
+   * The hand the learner is *not* playing, for the app to sound.
+   *
+   * Ignored in microphone mode, where the speaker feeds back into the
+   * microphone and the detector cannot tell the app's notes from the piano's.
+   */
+  accompany?: AccompanyNote[];
   /** Absolute URLs for the MOTOR 2 model and its worker. */
   modelUrl?: string;
   workerUrl?: string;
@@ -83,6 +91,9 @@ export interface RunnerOptions {
 const RESYNC_VOTES = 3;
 /** How far ahead (in expected notes) counts as "somewhere else in the piece". */
 const RESYNC_MIN_JUMP = 3;
+
+/** Lead-in before scheduled playback, long enough to survive a slow first frame. */
+const SCHEDULE_LEAD_SEC = 0.35;
 
 export class Runner {
   readonly notes: ExpectedNote[];
@@ -107,6 +118,19 @@ export class Runner {
   private resyncVotes = 0;
   private readonly latencyMeter = new LatencyMeter();
   private readonly metronome: Metronome;
+
+  /** The app playing the hand the learner is not; null when not offered. */
+  private accompanist: Accompanist | null = null;
+  /** In demo mode the other hand is scheduled on the audio clock instead. */
+  private readonly demoAccompany: AccompanyNote[];
+
+  private paused = false;
+  /** Wall-clock instant the pause began, to shift the a-tempo origin on resume. */
+  private pausedAtSec = 0;
+  /** Beat the demo has reached, so a paused demo resumes where it stopped. */
+  private demoBeat = 0;
+  /** Wall-clock origin of the demo currently scheduled. */
+  private demoStartWall = 0;
 
   private live: LivePractice | null = null;
   private mic: MicSource | null = null;
@@ -135,6 +159,14 @@ export class Runner {
     this.follower = new FollowYouFollower(this.notes);
     this.dtw = new DtwFollower(this.notes);
     this.metronome = new Metronome(opts.synth);
+
+    // The other hand. Never over the microphone: the speaker feeds straight back
+    // into it and the detector would score the app's own notes as the learner's.
+    const other = opts.mode === "mic" ? [] : (opts.accompany ?? []);
+    this.demoAccompany = opts.mode === "demo" ? other : [];
+    if (opts.mode === "keys" && other.length > 0) {
+      this.accompanist = new Accompanist(other, opts.synth, this.secPerBeat);
+    }
   }
 
   /** Measured software latency from capture callback to judged event. */
@@ -147,6 +179,16 @@ export class Runner {
     return this.poly?.offThread ?? false;
   }
 
+  /** True when the app is sounding the hand the learner is not playing. */
+  get accompanying(): boolean {
+    return this.accompanist !== null || this.demoAccompany.length > 0;
+  }
+
+  /** True while the attempt is suspended. */
+  get isPaused(): boolean {
+    return this.paused;
+  }
+
   /** Measures the student model rates as hardest so far. */
   weakestMeasures(limit = 3): number[] {
     return this.student.recommendPractice(limit);
@@ -154,11 +196,13 @@ export class Runner {
 
   async start(): Promise<void> {
     this.stopped = false;
+    this.paused = false;
     this.startedAtSec = performance.now() / 1000;
     if (this.opts.aTempo && this.opts.mode !== "demo") {
       this.judge = new ATempoJudge(this.notes, { secPerBeat: this.secPerBeat });
     }
-    if (this.opts.metronome) {
+    // The demo starts its own metronome aligned with the scheduled playback.
+    if (this.opts.metronome && this.opts.mode !== "demo") {
       this.metronome.start(this.opts.bpm, this.opts.beatsPerBar ?? 4);
     }
 
@@ -171,7 +215,7 @@ export class Runner {
         if (this.judge) this.startClock();
         break;
       case "demo":
-        this.startDemo();
+        this.startDemo(0);
         break;
       case "mic":
         await this.startMic();
@@ -182,6 +226,7 @@ export class Runner {
 
   stop(): void {
     this.stopped = true;
+    this.paused = false;
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
     this.metronome.stop();
@@ -194,12 +239,60 @@ export class Runner {
     this.opts.synth.allOff();
   }
 
+  // --- pause ----------------------------------------------------------------
+
+  /**
+   * Suspend the attempt without losing it.
+   *
+   * At a real piano you stop constantly — to read a fingering, to work out what
+   * a bar says, to answer the door. Before this the only way out was to stop,
+   * which threw the run away, so the app quietly punished the exact behaviour
+   * that practice is made of.
+   *
+   * The microphone is deliberately left open: reopening it costs a permission
+   * round-trip on iOS and a second of silence. Its detections are ignored.
+   */
+  pause(): void {
+    if (this.paused || this.stopped || this.finished) return;
+    this.paused = true;
+    this.pausedAtSec = performance.now() / 1000;
+    if (this.raf) cancelAnimationFrame(this.raf);
+    this.raf = 0;
+    this.metronome.stop();
+    this.opts.synth.allOff();
+    this.opts.hooks.onStatus("En pausa");
+  }
+
+  resume(): void {
+    if (!this.paused || this.stopped || this.finished) return;
+    this.paused = false;
+    // Everything on the elapsed clock moves forward by however long we waited,
+    // so a-tempo grading does not read the pause as a bar of notes played late.
+    this.startedAtSec += performance.now() / 1000 - this.pausedAtSec;
+
+    if (this.opts.mode === "demo") {
+      // Web Audio cannot un-schedule a note already in the graph, so a paused
+      // demo is re-scheduled from the beat it had reached.
+      this.startDemo(this.demoBeat);
+      return;
+    }
+    if (this.opts.metronome) {
+      const beat = this.judge
+        ? this.judge.positionBeats(performance.now() / 1000 - this.startedAtSec)
+        : this.follower.state.positionBeats;
+      this.metronome.start(this.opts.bpm, this.opts.beatsPerBar ?? 4, undefined, beat);
+    }
+    this.opts.hooks.onStatus(this.judge ? "A tempo: sigue el clic" : "Seguimos");
+    if (this.judge) this.startClock();
+    else this.emitProgress();
+  }
+
   // --- on-screen keyboard ---------------------------------------------------
 
   press(midi: number): void {
     // Only the on-screen keyboard may sound. In microphone mode the app's own
     // output is an input: anything the speaker plays goes back into the mic.
-    if (this.opts.mode !== "keys" || this.stopped) return;
+    if (this.opts.mode !== "keys" || this.stopped || this.paused) return;
     this.opts.synth.noteOn(midi);
     const detection: DetectedNote = {
       midi,
@@ -218,22 +311,38 @@ export class Runner {
 
   // --- demo playback --------------------------------------------------------
 
-  private startDemo(): void {
+  /**
+   * Schedule and follow the piece from `fromBeat`.
+   *
+   * Taking a starting beat (rather than always starting at zero) is what makes
+   * the demo pausable: Web Audio offers no way to cancel a note that is already
+   * scheduled, so resuming means scheduling the remainder afresh.
+   */
+  private startDemo(fromBeat: number): void {
     const { synth, hooks } = this.opts;
-    const startAudio = synth.now + 0.35;
-    const startWall = performance.now() / 1000 + 0.35;
-    for (const n of this.notes) {
-      synth.playAt(n.midi, startAudio + n.onset * this.secPerBeat, (n.offset - n.onset) * this.secPerBeat, 0.7);
-    }
+    const startAudio = synth.now + SCHEDULE_LEAD_SEC;
+    this.demoStartWall = performance.now() / 1000 + SCHEDULE_LEAD_SEC;
+    this.demoBeat = fromBeat;
+
+    const schedule = (n: AccompanyNote, velocity: number): void => {
+      if (n.offset <= fromBeat) return;
+      const at = startAudio + Math.max(0, n.onset - fromBeat) * this.secPerBeat;
+      synth.playAt(n.midi, at, (n.offset - n.onset) * this.secPerBeat, velocity);
+    };
+    for (const n of this.notes) schedule(n, 0.7);
+    // The other hand, quieter, so the line being learnt still stands out.
+    for (const n of this.demoAccompany) schedule(n, 0.45);
+
     if (this.opts.metronome) {
-      this.metronome.start(this.opts.bpm, this.opts.beatsPerBar ?? 4, startAudio);
+      this.metronome.start(this.opts.bpm, this.opts.beatsPerBar ?? 4, startAudio, fromBeat);
     }
     const lastBeat = Math.max(...this.notes.map((n) => n.offset));
     hooks.onStatus("Escucha y mira la partitura");
 
     const tick = (): void => {
-      if (this.stopped) return;
-      const beat = (performance.now() / 1000 - startWall) / this.secPerBeat;
+      if (this.stopped || this.paused) return;
+      const beat = fromBeat + (performance.now() / 1000 - this.demoStartWall) / this.secPerBeat;
+      this.demoBeat = Math.max(fromBeat, beat);
       const doneIndex = this.notes.filter((n) => n.onset < beat - 1e-6).length;
       const sounding = this.notes.filter((n) => n.onset <= beat && n.offset > beat);
       hooks.onProgress({
@@ -261,12 +370,12 @@ export class Runner {
    */
   private startClock(): void {
     const tick = (): void => {
-      if (this.stopped || !this.judge) return;
+      if (this.stopped || this.paused || !this.judge) return;
       const elapsed = performance.now() / 1000 - this.startedAtSec;
       const missed = this.judge.collectMissed(elapsed);
       if (missed.length > 0) this.handleEvents(missed);
       this.measure = this.judge.measureAt(elapsed);
-      this.opts.hooks.onProgress({
+      this.emit({
         doneIndex: this.judge.judged,
         total: this.judge.total,
         positionBeats: this.judge.positionBeats(elapsed),
@@ -301,13 +410,14 @@ export class Runner {
       {
         onEvents: (events) => {
           for (const event of events) this.latencyMeter.eventJudged(event.timeSec);
+          if (this.paused) return;
           // In a-tempo mode the engine's own follower is ignored: its events are
           // re-judged against the clock so timing is graded rather than excused.
           if (this.judge) return;
           this.handleEvents(events);
         },
         onProgress: (p) => {
-          if (this.judge) return;
+          if (this.judge || this.paused) return;
           this.syncFromLive(p.index, p.positionBeats, p.measure, p.done);
         },
       },
@@ -321,7 +431,12 @@ export class Runner {
         // played into the microphone was discarded, and the whole piece would be
         // scored as missed.
         ...(this.opts.aTempo
-          ? { onDetections: (notes: DetectedNote[]) => this.handleEvents(this.judgeDetections(notes)) }
+          ? {
+              onDetections: (notes: DetectedNote[]) => {
+                if (this.paused) return;
+                this.handleEvents(this.judgeDetections(notes));
+              },
+            }
           : {}),
       },
     );
@@ -339,7 +454,7 @@ export class Runner {
 
   private syncFromLive(index: number, positionBeats: number, measure: number, done: boolean): void {
     this.measure = measure;
-    this.opts.hooks.onProgress({
+    this.emit({
       doneIndex: index,
       total: this.notes.length,
       positionBeats,
@@ -427,13 +542,26 @@ export class Runner {
   private emitProgress(): void {
     const state = this.follower.state;
     this.measure = state.measure;
-    this.opts.hooks.onProgress({
+    this.emit({
       doneIndex: this.baseIndex + state.index,
       total: this.notes.length,
       positionBeats: state.positionBeats,
       measure: state.measure,
       expected: this.currentGroup().map((n) => n.midi),
     });
+  }
+
+  /**
+   * Publish a cursor position — and let the accompaniment hear it first.
+   *
+   * The other hand is driven by the cursor rather than by a clock so that in
+   * wait mode it arrives exactly as the learner reaches it. Every position the
+   * app produces goes through here, so the two cannot drift apart in some mode
+   * nobody remembered to wire up.
+   */
+  private emit(p: Parameters<RunnerHooks["onProgress"]>[0]): void {
+    this.accompanist?.update(p.positionBeats);
+    this.opts.hooks.onProgress(p);
   }
 
   private finish(completed: boolean): void {

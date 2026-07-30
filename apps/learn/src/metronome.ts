@@ -35,11 +35,14 @@ export class Metronome {
    * aligned with something else that was scheduled — the count-in, or the demo
    * playback — rather than starting whenever the timer happens to fire.
    */
-  start(bpm: number, beatsPerBar: number, startAt?: number): void {
+  start(bpm: number, beatsPerBar: number, startAt?: number, fromBeat = 0): void {
     this.stop();
     this.secPerBeat = 60 / Math.max(20, bpm);
     this.beatsPerBar = Math.max(1, Math.round(beatsPerBar));
-    this.beat = 0;
+    // `fromBeat` keeps the accent on the downbeat when the metronome is restarted
+    // in the middle of a piece — after a pause, the strong beat must still be the
+    // strong beat, or the click is actively misleading.
+    this.beat = Math.max(0, Math.round(fromBeat));
     this.nextBeatTime = startAt ?? this.synth.now;
     this.schedule();
     this.timer = window.setInterval(() => this.schedule(), TICK_MS);

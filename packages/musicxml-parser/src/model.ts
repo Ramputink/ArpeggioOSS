@@ -56,6 +56,21 @@ export interface TempoMark {
   bpm: number;
 }
 
+/**
+ * A key signature, tied to the measure where it appears.
+ *
+ * Kept in the model rather than inferred downstream because a renderer that does
+ * not know the key has to print an accidental on every altered note. That is
+ * musically correct and visually unreadable: the Canon in D would carry a sharp
+ * on every F and C in the piece instead of two symbols at the start of the line.
+ */
+export interface KeySignature {
+  /** 1-based measure number where this signature starts applying. */
+  measure: number;
+  /** Position on the circle of fifths: positive = sharps, negative = flats. */
+  fifths: number;
+}
+
 /** A time signature, tied to the measure where it appears. */
 export interface TimeSignature {
   /** 1-based measure number where this signature starts applying. */
@@ -74,6 +89,8 @@ export interface Score {
   divisions: number;
   /** Time signatures in order of appearance. */
   timeSignatures: TimeSignature[];
+  /** Key signatures in order of appearance; empty means C major / A minor. */
+  keySignatures: KeySignature[];
   /** Tempo marks in order of appearance. */
   tempos: TempoMark[];
   /** Part identifiers/names, in score order. */

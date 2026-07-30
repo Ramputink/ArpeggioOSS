@@ -16,7 +16,7 @@
  */
 import { XMLParser } from "fast-xml-parser";
 
-import type { NoteEvent, Score, TempoMark, TimeSignature } from "./model.js";
+import type { KeySignature, NoteEvent, Score, TempoMark, TimeSignature } from "./model.js";
 import { computePlayOrder, type MeasureRepeatInfo } from "./repeats.js";
 
 // --- preserveOrder tree helpers --------------------------------------------
@@ -99,22 +99,20 @@ interface RawMeasure {
   /** Divisions-per-quarter active in this measure. */
   divisions: number;
   time: TimeSignature | null;
+  key: KeySignature | null;
   tempo: number | null;
   repeat: MeasureRepeatInfo;
 }
 
 /** Walk one `<measure>` and extract its notes, timing and barline info. */
-function parseMeasure(
-  measureNode: PNode,
-  measureNumber: number,
-  divisionsIn: number,
-): RawMeasure {
+function parseMeasure(measureNode: PNode, measureNumber: number, divisionsIn: number): RawMeasure {
   let divisions = divisionsIn;
   let cursor = 0;
   let maxDiv = 0;
   let lastOnset = 0; // onset of the previous non-chord note (for chords)
   const notes: RawNote[] = [];
   let time: TimeSignature | null = null;
+  let key: KeySignature | null = null;
   let tempo: number | null = null;
 
   const repeat: MeasureRepeatInfo = {
@@ -155,6 +153,13 @@ function parseMeasure(
           const beats = childInt(timeNode, "beats");
           const beatType = childInt(timeNode, "beat-type");
           if (beats && beatType) time = { measure: measureNumber, beats, beatType };
+        }
+        const keyNode = findChild(child, "key");
+        if (keyNode) {
+          // `<fifths>0</fifths>` is C major, which is a real signature and not a
+          // missing one, so this must not be folded into a falsy check.
+          const fifths = childInt(keyNode, "fifths");
+          if (fifths !== undefined) key = { measure: measureNumber, fifths };
         }
         break;
       }
@@ -252,7 +257,7 @@ function parseMeasure(
     }
   }
 
-  return { number: measureNumber, notes, maxDiv, divisions, time, tempo, repeat };
+  return { number: measureNumber, notes, maxDiv, divisions, time, key, tempo, repeat };
 }
 
 /** A part = an ordered list of parsed measures. */
@@ -359,8 +364,10 @@ export function parseMusicXML(xml: string): Score {
 
   const events: NoteEvent[] = [];
   const timeSignatures: TimeSignature[] = [];
+  const keySignatures: KeySignature[] = [];
   const tempos: TempoMark[] = [];
   const seenTimeSig = new Set<number>();
+  const seenKeySig = new Set<number>();
 
   // Open tie tracker: key `pitch|voice|staff` -> index into `events`.
   const openTies = new Map<string, number>();
@@ -377,6 +384,10 @@ export function parseMusicXML(xml: string): Score {
       if (m.time && !seenTimeSig.has(mi)) {
         timeSignatures.push(m.time);
         seenTimeSig.add(mi);
+      }
+      if (m.key && !seenKeySig.has(mi)) {
+        keySignatures.push(m.key);
+        seenKeySig.add(mi);
       }
       if (m.tempo != null) tempos.push({ onset: measureStartQ, bpm: m.tempo });
 
@@ -420,6 +431,7 @@ export function parseMusicXML(xml: string): Score {
     events,
     divisions: primary.measures[0]?.divisions ?? 1,
     timeSignatures,
+    keySignatures,
     tempos,
     parts: parts.map((p) => p.id),
     repeatsFlattened: playOrder.length !== nMeasures,

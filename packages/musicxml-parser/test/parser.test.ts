@@ -135,3 +135,47 @@ test("cross-barline tie does not trigger a false overfull warning", () => {
   const overfull = report.warnings.filter((w) => w.code === "measure-overfull");
   assert.equal(overfull.length, 0);
 });
+
+// ---------------------------------------------------------------------------
+// Key signatures
+// ---------------------------------------------------------------------------
+
+/** Two measures, opening in D major and modulating to F major. */
+const KEY_FIXTURE = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>1</divisions>
+        <key><fifths>2</fifths><mode>major</mode></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><staff>1</staff></note>
+    </measure>
+    <measure number="2">
+      <attributes><key><fifths>-1</fifths></key></attributes>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><staff>1</staff></note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+test("reads key signatures, including a mid-piece change", () => {
+  const score = parseMusicXML(KEY_FIXTURE);
+  assert.deepEqual(score.keySignatures, [
+    { measure: 1, fifths: 2 },
+    { measure: 2, fifths: -1 },
+  ]);
+});
+
+test("C major is a key signature, not a missing one", () => {
+  // `<fifths>0</fifths>` must survive: a renderer that treats 0 as "absent"
+  // would print every accidental explicitly for the most common key there is.
+  const score = parseMusicXML(KEY_FIXTURE.replace("<fifths>2</fifths>", "<fifths>0</fifths>"));
+  assert.equal(score.keySignatures[0].fifths, 0);
+});
+
+test("a score with no key element reports no key signature", () => {
+  const score = parseMusicXML(FIXTURE);
+  assert.deepEqual(score.keySignatures, []);
+});

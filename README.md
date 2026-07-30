@@ -19,21 +19,21 @@ exercises the whole thing end-to-end.
 
 ## Repository layout
 
-| Path | What it is | Language |
-|------|-----------|----------|
-| `services/omr/` | HTTP OMR service: preprocessing + Audiveris wrapper. Deploys to the Intel Mac. | Python (FastAPI, Pillow) |
-| `services/omr/Dockerfile` · `docker-compose.yml` | Containerized deployment (x86_64). | — |
-| `services/omr/scripts/` | Native (no-Docker) install/run scripts for macOS. | Bash |
-| `packages/musicxml-parser/` | MusicXML → internal model + quality report. | TypeScript |
-| `packages/omr-client/` | CLI test client (upload, save, parse, report). | TypeScript |
-| `packages/practice-engine/` | On-device practice core: note detection + score following + feedback (Phases 4–6). | TypeScript |
-| `packages/motor2-basicpitch/` | MOTOR 2: real polyphonic transcription (Spotify Basic Pitch / TF.js). | TypeScript |
-| `packages/practice-web/` | Browser glue shared by both apps: mic capture + the practice pump. | TypeScript |
-| `packages/song-library/` | Ten public-domain beginner pieces in a compact notation → `Score`/MusicXML. | TypeScript |
-| `apps/learn/` | **Arpeggio Learn** — the mobile PWA: animated scrolling notation + on-screen piano. | TypeScript |
-| `apps/web/` | Desktop lab app: import a score (file or OMR) and practise it. | TypeScript |
-| `apps/viewer/` | Self-contained piano-roll viewer of the canonical model (Phase 2). | HTML |
-| `samples/demo.musicxml` | Tiny score for offline parser testing. | — |
+| Path                                             | What it is                                                                          | Language                 |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------- | ------------------------ |
+| `services/omr/`                                  | HTTP OMR service: preprocessing + Audiveris wrapper. Deploys to the Intel Mac.      | Python (FastAPI, Pillow) |
+| `services/omr/Dockerfile` · `docker-compose.yml` | Containerized deployment (x86_64).                                                  | —                        |
+| `services/omr/scripts/`                          | Native (no-Docker) install/run scripts for macOS.                                   | Bash                     |
+| `packages/musicxml-parser/`                      | MusicXML → internal model + quality report.                                         | TypeScript               |
+| `packages/omr-client/`                           | CLI test client (upload, save, parse, report).                                      | TypeScript               |
+| `packages/practice-engine/`                      | On-device practice core: note detection + score following + feedback (Phases 4–6).  | TypeScript               |
+| `packages/motor2-basicpitch/`                    | MOTOR 2: real polyphonic transcription (Spotify Basic Pitch / TF.js).               | TypeScript               |
+| `packages/practice-web/`                         | Browser glue shared by both apps: mic capture + the practice pump.                  | TypeScript               |
+| `packages/song-library/`                         | 19 public-domain pieces in a compact notation, plus generated technique exercises.  | TypeScript               |
+| `apps/learn/`                                    | **Arpeggio Learn** — the mobile PWA: animated scrolling notation + on-screen piano. | TypeScript               |
+| `apps/web/`                                      | Desktop lab app: import a score (file or OMR) and practise it.                      | TypeScript               |
+| `archive/`                                       | Superseded prototypes (the piano-roll viewer, the iPhone design sketch).            | HTML                     |
+| `samples/demo.musicxml`                          | Tiny score for offline parser testing.                                              | —                        |
 
 ### Start here: the learner app
 
@@ -49,6 +49,12 @@ Beyond the OMR demo, the repo now includes the algorithmic core of the later
 roadmap phases (render, detection, score following, feedback) — all headless and
 unit-tested. See **[`docs/PHASES.md`](docs/PHASES.md)** for the full status map and
 how the pieces connect into the on-device practice loop.
+
+### Contributing
+
+Adding a song is a ten-line diff, and it is the most useful thing anyone can send.
+See **[`CONTRIBUTING.md`](CONTRIBUTING.md)**. What needs doing, in order of honest
+expected value, is **[`docs/ROADMAP.md`](docs/ROADMAP.md)**.
 
 ## Component versions (verified July 2026)
 
@@ -182,18 +188,18 @@ The Docker path (Debian, linux/amd64) has none of these issues and keeps OCR on.
 
 ### Service configuration (env vars)
 
-| Var | Default | Meaning |
-|-----|---------|---------|
-| `OMR_PORT` | `8000` | Listen port. |
-| `OMR_JVM_HEAP` | `2g` | JVM heap cap for Audiveris (bound RAM on the old Mac). |
-| `OMR_TARGET_DPI` | `300` | DPI after preprocessing normalization. |
-| `OMR_MAX_PAGES` | `12` | Warn/guard threshold for long PDFs. |
-| `OMR_DISABLE_OCR` | `false` | Skip Audiveris OCR (set `true` on macOS 11). |
-| `AUDIVERIS_CMD` | (set by Docker/native) | Path to the Audiveris launcher. |
-| `TESSDATA_PREFIX` | (set by Docker/native) | Tesseract language-data dir. |
-| `OMR_STATIC_DIR` | (empty) | Dir of the built web app (`apps/web/dist`), served at `/`. Empty = API only. |
-| `OMR_CORS_ORIGINS` | `*` | Comma-separated allowed API origins (e.g. `http://localhost:5173`). |
-| `OMR_TLS` | `0` | When `1`/`true` and certs exist, serve HTTPS (see below). |
+| Var                | Default                | Meaning                                                                      |
+| ------------------ | ---------------------- | ---------------------------------------------------------------------------- |
+| `OMR_PORT`         | `8000`                 | Listen port.                                                                 |
+| `OMR_JVM_HEAP`     | `2g`                   | JVM heap cap for Audiveris (bound RAM on the old Mac).                       |
+| `OMR_TARGET_DPI`   | `300`                  | DPI after preprocessing normalization.                                       |
+| `OMR_MAX_PAGES`    | `12`                   | Warn/guard threshold for long PDFs.                                          |
+| `OMR_DISABLE_OCR`  | `false`                | Skip Audiveris OCR (set `true` on macOS 11).                                 |
+| `AUDIVERIS_CMD`    | (set by Docker/native) | Path to the Audiveris launcher.                                              |
+| `TESSDATA_PREFIX`  | (set by Docker/native) | Tesseract language-data dir.                                                 |
+| `OMR_STATIC_DIR`   | (empty)                | Dir of the built web app (`apps/web/dist`), served at `/`. Empty = API only. |
+| `OMR_CORS_ORIGINS` | `*`                    | Comma-separated allowed API origins (e.g. `http://localhost:5173`).          |
+| `OMR_TLS`          | `0`                    | When `1`/`true` and certs exist, serve HTTPS (see below).                    |
 
 ### Web app (serve + HTTPS for microphone)
 
@@ -240,16 +246,18 @@ origin; the static mount is registered last so it never shadows them.
 ## 2. HTTP API
 
 ### `GET /health`
+
 Liveness probe. Returns `{status, service, audiveris_version}`.
 
 ### `POST /omr`
+
 Multipart upload of a score; returns MusicXML as `text`
 (`application/vnd.recordare.musicxml+xml`).
 
-| Param | Type | Default | Notes |
-|-------|------|---------|-------|
-| `file` | file (form field) | — | PNG/JPG/TIFF/BMP or PDF. |
-| `preprocess` | query bool | `true` | OpenCV deskew/crop/binarize/300dpi before OMR. |
+| Param        | Type              | Default | Notes                                          |
+| ------------ | ----------------- | ------- | ---------------------------------------------- |
+| `file`       | file (form field) | —       | PNG/JPG/TIFF/BMP or PDF.                       |
+| `preprocess` | query bool        | `true`  | OpenCV deskew/crop/binarize/300dpi before OMR. |
 
 Errors: `415` unsupported type, `400` empty/bad input, `422` Audiveris failed or
 score unrecognizable.
@@ -343,6 +351,7 @@ npm test -w @arpeggio/musicxml-parser
 ```
 
 ### Known limitations (demo scope)
+
 - `score-timewise` MusicXML is not supported (convert to `score-partwise`).
 - Grace notes are skipped (they carry no `<duration>`).
 - Repeat expansion handles forward/backward repeats and first/second endings;

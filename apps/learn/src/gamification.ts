@@ -30,6 +30,16 @@ export interface Stats {
   modes: string[];
   /** Hand choices ever used ("right" | "left" | "both"). */
   hands: string[];
+  /**
+   * Seconds spent actually practising, all time.
+   *
+   * The number that correlates with getting better, and the one a learner
+   * recognises as effort — "I practised twenty minutes" means something that
+   * "I played 340 notes" does not. Counted only while the practice screen is in
+   * front of them (see `practiceTime.ts`), so leaving the app open on the
+   * kitchen table earns nothing.
+   */
+  seconds: number;
 }
 
 export const EMPTY_STATS: Stats = {
@@ -41,6 +51,7 @@ export const EMPTY_STATS: Stats = {
   days: [],
   modes: [],
   hands: [],
+  seconds: 0,
 };
 
 // ---------------------------------------------------------------------------
@@ -135,6 +146,20 @@ export interface Achievement {
 /** Songs at level 4 or above — the real classical repertoire. */
 const CLASSICAL_IDS = new Set(SONGS.filter((s) => s.level >= 4).map((s) => s.id));
 
+/**
+ * Ids that count towards "finish the library".
+ *
+ * Generated technique exercises and imported scores also land in `stats.songs`,
+ * and they must not be able to satisfy this: playing ten scales is not finishing
+ * the repertoire.
+ */
+const LIBRARY_IDS = new Set(SONGS.map((s) => s.id));
+
+/** Whole minutes of practice, for the time-based achievements. */
+function minutes(stats: Stats): number {
+  return Math.floor(stats.seconds / 60);
+}
+
 export const ACHIEVEMENTS: Achievement[] = [
   {
     id: "first-note",
@@ -198,7 +223,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     description: "Termina todas las piezas de la biblioteca.",
     icon: "star",
     goal: SONGS.length,
-    progress: (s) => s.songs.length,
+    progress: (s) => s.songs.filter((id) => LIBRARY_IDS.has(id)).length,
   },
   {
     id: "perfect-1",
@@ -255,6 +280,30 @@ export const ACHIEVEMENTS: Achievement[] = [
     icon: "note",
     goal: 3,
     progress: (s) => s.songs.filter((id) => CLASSICAL_IDS.has(id)).length,
+  },
+  {
+    id: "minutes-10",
+    title: "Diez minutos",
+    description: "Practica 10 minutos en total.",
+    icon: "clock",
+    goal: 10,
+    progress: minutes,
+  },
+  {
+    id: "minutes-60",
+    title: "Una hora al piano",
+    description: "Acumula 60 minutos de práctica.",
+    icon: "clock",
+    goal: 60,
+    progress: minutes,
+  },
+  {
+    id: "minutes-600",
+    title: "Diez horas",
+    description: "Acumula 600 minutos de práctica.",
+    icon: "clock",
+    goal: 600,
+    progress: minutes,
   },
   {
     id: "days-3",

@@ -45,10 +45,31 @@ export interface Song {
   pickupBeats?: number;
   /** One-line coaching note shown before playing (Spanish). */
   tip: string;
+  /** Where each hand starts, when the piece has a definite starting position. */
+  startPosition?: StartPosition;
   /** Right-hand voice in the compact notation. */
   right: string;
   /** Optional left-hand voice; when absent the song is right hand only. */
   left?: string;
+}
+
+/**
+ * The five-finger position each hand begins in, given as the **lowest** MIDI
+ * note it covers.
+ *
+ * Under the right hand that note is the thumb; under the left hand it is the
+ * little finger. Either way it is the leftmost key of the span, which is what
+ * makes one number enough to place the hand and to light up five keys.
+ *
+ * This is the single most useful thing to tell a beginner before the first note,
+ * and the one a printed score never says. A piece whose hand moves constantly
+ * simply omits it rather than claiming a position it does not keep.
+ */
+export interface StartPosition {
+  /** Lowest note of the right hand's opening five-finger span (thumb). */
+  right?: number;
+  /** Lowest note of the left hand's opening five-finger span (little finger). */
+  left?: number;
 }
 
 /** Which hand(s) the learner is practising. */

@@ -8,19 +8,35 @@ whole thing works with nothing but a phone.
 The six tiers are a path, not a rating; each exists to teach what the next one
 assumes:
 
-| Tier | Teaches | Pieces |
-|---|---|---|
-| 1 · Primeros pasos | Five fingers on C, no black keys | Twinkle, Mary Had a Little Lamb, Ode to Joy, Jingle Bells |
-| 2 · Melodías completas | Hand shifts, dotted rhythms, 3/4, a simple bass | Au clair de la lune, Frère Jacques, London Bridge, Silent Night |
-| 3 · Primeras piezas clásicas | Two hands, black keys, key signatures | Für Elise, Canon in D |
-| 4 · Repertorio clásico | Long melodies, independent voices | Dvořák's Largo, Bach's Minuet in G |
-| 5 · Grandes obras | Continuous arpeggios, triplets | Bach's Prelude in C, Moonlight Sonata (opening) |
-| 6 · Camino al neoclásico | Wide broken-chord left hand under a sung melody | Three original studies |
+| Tier                         | Teaches                                         | Pieces                                                          |
+| ---------------------------- | ----------------------------------------------- | --------------------------------------------------------------- |
+| 1 · Primeros pasos           | Five fingers on C, no black keys                | Twinkle, Mary Had a Little Lamb, Ode to Joy, Jingle Bells       |
+| 2 · Melodías completas       | Hand shifts, dotted rhythms, 3/4, a simple bass | Au clair de la lune, Frère Jacques, London Bridge, Silent Night |
+| 3 · Primeras piezas clásicas | Two hands, black keys, key signatures           | Für Elise, Canon in D, Bach's Minuet (first phrase)             |
+| 4 · Repertorio clásico       | Long melodies, independent voices               | Dvořák's Largo, Bach's Minuet in G, the Prelude's opening       |
+| 5 · Grandes obras            | Continuous arpeggios, triplets                  | Bach's Prelude in C, Moonlight Sonata (opening)                 |
+| 6 · Camino al neoclásico     | Wide broken-chord left hand under a sung melody | Three original studies                                          |
 
 Level 6 is written for this app rather than transcribed: modern neoclassical
 piano is under copyright, so instead of shipping someone else's piece we teach
 its machinery. Where a left hand is a simplification of the original (Bach's
 Minuet), the song's tip says so.
+
+Two of the tiers open with a **bridge**: the Minuet's first phrase at level 3 and
+the Prelude's first two bars at level 4, slower and half the length. They are the
+same notes with the same fingering as the full pieces that follow, so nothing has
+to be unlearnt — they exist because those were the two steepest steps in the
+curriculum.
+
+**Every note carries a fingering**, and pieces whose hand stays put also say where
+to put it before the first note ("pulgar derecho en DO4"), lighting the five keys
+on the on-screen keyboard. Pieces whose hand moves say nothing rather than
+inventing a position.
+
+Alongside the repertoire there are **generated technique exercises** — five-finger
+patterns, contrary motion, broken chords and one-octave scales, in several keys.
+They are computed from a few parameters rather than written out, so the fingering
+cannot drift out of step with the notes and a new key is one line.
 
 It is a static PWA: no account, no backend, no network after the first load.
 
@@ -35,7 +51,7 @@ npm run share -w @arpeggio/learn  # serves dist/ over HTTPS on your LAN
 The command prints a `https://192.168.x.x:5174` URL — open it on a phone on the
 same Wi-Fi. The certificate is self-signed and generated into `.cert/` on first
 run, so the phone shows a "not private" warning once: **Advanced → Visit
-anyway**. Then use *Share → Add to Home Screen* to install it; it launches full
+anyway**. Then use _Share → Add to Home Screen_ to install it; it launches full
 screen and keeps working offline.
 
 HTTPS is not a nicety here: browsers only grant microphone access and only allow
@@ -47,18 +63,18 @@ HTTP on `:5174` (screen-keyboard practice works; the microphone does not).
 
 Two independent choices. **Input:**
 
-| Mode | What it does |
-|------|--------------|
-| **En la pantalla** | Tap the on-screen keys. They sound, and they are judged exactly like a real performance. |
-| **Mi piano** | Listens through the microphone (MOTOR 1 = YIN; MOTOR 2 = Basic Pitch when the part has chords). |
-| **Escuchar** | The app plays the piece so you can hear it and follow the notation. |
+| Mode               | What it does                                                                                    |
+| ------------------ | ----------------------------------------------------------------------------------------------- |
+| **En la pantalla** | Tap the on-screen keys. They sound, and they are judged exactly like a real performance.        |
+| **Mi piano**       | Listens through the microphone (MOTOR 1 = YIN; MOTOR 2 = Basic Pitch when the part has chords). |
+| **Escuchar**       | The app plays the piece so you can hear it and follow the notation.                             |
 
 **Judging:**
 
-| Mode | What it does |
-|------|--------------|
+| Mode          | What it does                                                                                                             |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | **Te espera** | The cursor waits on every note. Forgiving, and says nothing about rhythm — right for reading a piece for the first time. |
-| **A tempo** | The cursor keeps going at the tempo and grades you early/late/missed. The honest mode, and the one to graduate to. |
+| **A tempo**   | The cursor keeps going at the tempo and grades you early/late/missed. The honest mode, and the one to graduate to.       |
 
 Wait mode is the "follow-you" follower from `@arpeggio/practice-engine`; a-tempo
 grading is `aTempo.ts`, and a learner who restarts from the middle is found again
@@ -73,7 +89,8 @@ play screen, or Ajustes). It changes the assumptions rather than the styling:
   and a path from the speaker back into the microphone;
 - **notation about twice the size** (staff space 34 px instead of 22), because you
   are reading from 60 cm, not 30;
-- **three controls big enough to hit without looking** — Repetir, Bucle, Parar;
+- **four controls big enough to hit without looking** — Pausa, Repetir, Bucle,
+  Parar (the same transport is on screen in the hand, just compact);
 - **the screen stays awake** (`wakeLock.ts`), which is a total blocker otherwise:
   the phone locks mid-piece and you cannot tap to wake it;
 - **landscape first**, which is how a music desk holds a phone and where the staff
@@ -95,13 +112,26 @@ worth it (and the measurement that decides).
 - **Bucle** — drill the bars the student model rates weakest (or the bar you are
   on). A loop is run as a piece in its own right, so the follower, the staff and
   the progress bar need no special cases.
+- **Pausa** — in every mode. At a piano you stop constantly, and before this the
+  only way out threw the run away. A paused demo is re-scheduled from the beat it
+  had reached, because Web Audio cannot un-schedule a note.
+- **La app toca la otra mano** — practise one hand and hear the piece. Driven by
+  the cursor rather than a clock, so in "te espera" mode it waits with you. Off
+  over a microphone by construction: the speaker feeds back into the mic and the
+  detector cannot tell the app's notes from the piano's.
 - **Rampa de tempo** — after a clean run, take the same piece 10 % faster.
 - **Vista de página** — a static system with a moving cursor instead of continuous
-  scrolling: how you learn to read *ahead*.
+  scrolling: how you learn to read _ahead_.
 - **Sesión de 10 min** — warm up, fix what is failing, then something new, in that
   order, planned from your own history (`session.ts`).
-- **Importar partitura** — a `.musicxml` file from a public-domain edition appears
-  under "Mis partituras" and plays like any built-in piece.
+- **Importar partitura** — a `.musicxml` **or `.mxl`** file from a public-domain
+  edition appears under "Mis partituras" and plays like any built-in piece.
+  Compressed `.mxl` is what MuseScore, Sibelius and Finale export by default, and
+  it is read with a small zip reader rather than a dependency (`mxl.ts`).
+- **Minutos de práctica** — counted only while the practice screen is actually in
+  front of you: paused with the tab, paused with the piece, and capped per
+  unbroken stretch, so the one number that means effort is not inflated by a phone
+  left face-up on the piano.
 
 ## Target device
 
@@ -195,10 +225,11 @@ C4 C4 G4 G4 | A4 A4 G4:2 | F4 F4 E4 E4 | D4 D4 C4:2
 ```
 
 `C4` is a quarter note, `:2` sets the duration in quarter-note beats, `:1/3` is
-a triplet eighth, `r:2` is a rest, `C3+E3+G3:4` is a chord, and `|` closes a
-bar. **Every bar is checked against the time signature at parse time**, so a
-mistyped duration fails `npm test` instead of quietly desynchronising the
-follower.
+a triplet eighth, `C4/1` adds a finger, `r:2` is a rest, `C3+E3+G3:4` is a chord,
+and `|` closes a bar. **Every bar is checked against the time signature at parse
+time**, so a mistyped duration fails `npm test` instead of quietly
+desynchronising the follower — and so does a note with no fingering.
 
 Only public-domain music, please: traditional tunes, or composers dead more than
-a century.
+a century. The full walkthrough is in
+[`CONTRIBUTING.md`](../../CONTRIBUTING.md).

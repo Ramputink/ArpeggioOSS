@@ -49,10 +49,12 @@ export function midiToSpelling(
   // Prefer sharps in sharp keys and in C major (where accidentals are chromatic
   // passing tones — Für Elise's D# reads far better than E♭).
   const useFlats = sharps < 0;
+  // prettier-ignore
   const sharpNames: Array<[string, -1 | 0 | 1]> = [
     ["C", 0], ["C", 1], ["D", 0], ["D", 1], ["E", 0], ["F", 0],
     ["F", 1], ["G", 0], ["G", 1], ["A", 0], ["A", 1], ["B", 0],
   ];
+  // prettier-ignore
   const flatNames: Array<[string, -1 | 0 | 1]> = [
     ["C", 0], ["D", -1], ["D", 0], ["E", -1], ["E", 0], ["F", 0],
     ["G", -1], ["G", 0], ["A", -1], ["A", 0], ["B", -1], ["B", 0],
@@ -127,9 +129,7 @@ export function parseVoice(source: string, opts: VoiceOptions): ParsedVoice {
   const closeBar = (): void => {
     const played = cursor - barStart;
     if (Math.abs(played - expectedBarLength) > 1e-6) {
-      throw new Error(
-        `bar ${barIndex + 1} has ${played} beats, expected ${expectedBarLength}`,
-      );
+      throw new Error(`bar ${barIndex + 1} has ${played} beats, expected ${expectedBarLength}`);
     }
     barIndex++;
     barStart = cursor;
@@ -225,6 +225,7 @@ export function songToScore(song: Song, hands: "right" | "left" | "both" = "both
     events: voices,
     divisions: 1,
     timeSignatures,
+    keySignatures: [{ measure: 1, fifths: song.sharps }],
     tempos: [{ onset: 0, bpm: song.bpm }],
     parts: ["Piano"],
     repeatsFlattened: true,
@@ -259,7 +260,11 @@ interface NoteValue {
 /** Map a duration in beats to a MusicXML `<type>`, dots and tuplet ratio. */
 function noteType(beats: number): NoteValue {
   const table: Array<[number, string]> = [
-    [4, "whole"], [2, "half"], [1, "quarter"], [0.5, "eighth"], [0.25, "16th"],
+    [4, "whole"],
+    [2, "half"],
+    [1, "quarter"],
+    [0.5, "eighth"],
+    [0.25, "16th"],
   ];
   for (const [value, type] of table) {
     if (Math.abs(beats - value) < 1e-6) return { type, dots: 0 };
@@ -303,7 +308,11 @@ export function songToMusicXML(song: Song): string {
     {
       staff: 1,
       events: parseVoice(song.right, {
-        hand: "right", staff: 1, voice: 1, beatsPerBar: perBar, pickupBeats: song.pickupBeats,
+        hand: "right",
+        staff: 1,
+        voice: 1,
+        beatsPerBar: perBar,
+        pickupBeats: song.pickupBeats,
       }).events,
     },
   ];
@@ -311,22 +320,25 @@ export function songToMusicXML(song: Song): string {
     staves.push({
       staff: 2,
       events: parseVoice(song.left, {
-        hand: "left", staff: 2, voice: 2, beatsPerBar: perBar, pickupBeats: song.pickupBeats,
+        hand: "left",
+        staff: 2,
+        voice: 2,
+        beatsPerBar: perBar,
+        pickupBeats: song.pickupBeats,
       }).events,
     });
   }
 
-  const lastMeasure = Math.max(
-    ...staves.flatMap((s) => s.events.map((e) => e.measure)),
-    1,
-  );
+  const lastMeasure = Math.max(...staves.flatMap((s) => s.events.map((e) => e.measure)), 1);
 
   const out: string[] = [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">',
     '<score-partwise version="4.0">',
     "  <work><work-title>" + escapeXml(song.title) + "</work-title></work>",
-    "  <identification><creator type=\"composer\">" + escapeXml(song.composer) + "</creator></identification>",
+    '  <identification><creator type="composer">' +
+      escapeXml(song.composer) +
+      "</creator></identification>",
     '  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>',
     '  <part id="P1">',
   ];
@@ -341,7 +353,9 @@ export function songToMusicXML(song: Song): string {
         `        <time><beats>${song.beats}</beats><beat-type>${song.beatType}</beat-type></time>`,
         `        <staves>${staves.length}</staves>`,
         '        <clef number="1"><sign>G</sign><line>2</line></clef>',
-        ...(staves.length > 1 ? ['        <clef number="2"><sign>F</sign><line>4</line></clef>'] : []),
+        ...(staves.length > 1
+          ? ['        <clef number="2"><sign>F</sign><line>4</line></clef>']
+          : []),
         "      </attributes>",
       );
     }
@@ -351,7 +365,9 @@ export function songToMusicXML(song: Song): string {
       // Each staff is written for the whole bar (padded with rests), so the
       // rewind before the next staff is always exactly one bar.
       if (i > 0) {
-        out.push(`      <backup><duration>${Math.round(barLength * DIVISIONS)}</duration></backup>`);
+        out.push(
+          `      <backup><duration>${Math.round(barLength * DIVISIONS)}</duration></backup>`,
+        );
       }
       out.push(...measureXml(s.events, m, s.staff, i + 1, barLength));
     });

@@ -16,6 +16,7 @@ import {
   octaveOf,
   shortestGap,
   spell,
+  systemLayout,
   type StaffNote,
 } from "../src/staff.js";
 
@@ -59,7 +60,10 @@ test("an accidental sits on its natural letter's staff line", () => {
 test("eighths are beamed within a beat and broken across one", () => {
   const groups = beamGroups(notes([60, 0, 0.5], [62, 0.5, 0.5], [64, 1, 0.5], [65, 1.5, 0.5]));
   assert.equal(groups.length, 2, "one beam per beat");
-  assert.deepEqual(groups.map((g) => g.length), [2, 2]);
+  assert.deepEqual(
+    groups.map((g) => g.length),
+    [2, 2],
+  );
 });
 
 test("a triplet is one beam of three", () => {
@@ -73,7 +77,10 @@ test("sixteenths beam four to a beat", () => {
   const groups = beamGroups(
     notes([60, 0, 0.25], [62, 0.25, 0.25], [64, 0.5, 0.25], [65, 0.75, 0.25]),
   );
-  assert.deepEqual(groups.map((g) => g.length), [4]);
+  assert.deepEqual(
+    groups.map((g) => g.length),
+    [4],
+  );
 });
 
 test("long notes, rests and lone short notes never form a beam", () => {
@@ -119,10 +126,86 @@ test("the key range is padded out to whole octaves", () => {
 });
 
 test("every beamed note appears in exactly one group", () => {
-  const run = notes(
-    [60, 0, 0.5], [62, 0.5, 0.5], [64, 1, 0.5], [65, 1.5, 0.5], [67, 2, 2],
-  );
+  const run = notes([60, 0, 0.5], [62, 0.5, 0.5], [64, 1, 0.5], [65, 1.5, 0.5], [67, 2, 2]);
   const grouped = beamGroups(run).flat();
   assert.equal(new Set(grouped.map((n) => n.index)).size, grouped.length);
   assert.ok(!grouped.some((n) => n.offset - n.onset > 0.75), "no long note is beamed");
+});
+
+// ---------------------------------------------------------------------------
+// System geometry
+// ---------------------------------------------------------------------------
+
+/** An iPhone 15 Pro in portrait, with the staff area a phone actually gives it. */
+const PHONE = { width: 393, height: 260, clefCount: 1, sharps: 0, maxSpace: 22, minGap: 1 };
+/** The same phone in landscape on a music desk, where the notation grows. */
+const STAND = { width: 852, height: 300, clefCount: 2, sharps: 0, maxSpace: 34, minGap: 1 };
+
+test("the staff is centred vertically, not pinned to the top", () => {
+  // A top-anchored staff leaves a dead half-screen underneath on a tall phone.
+  const tall = systemLayout({ ...PHONE, height: 600 });
+  const used = tall.staffTops[0] + 4 * tall.space;
+  const above = tall.staffTops[0];
+  const below = 600 - used;
+  assert.ok(Math.abs(above - below) < 3 * tall.space, "the system sits near the middle");
+});
+
+test("notation never grows past the cap for its layout", () => {
+  assert.ok(systemLayout({ ...PHONE, height: 2000 }).space <= 22);
+  assert.ok(systemLayout({ ...STAND, height: 2000 }).space <= 34);
+  // ...and never collapses to nothing on a short screen either.
+  assert.ok(systemLayout({ ...PHONE, height: 40 }).space >= 5);
+});
+
+test("a grand staff leaves a corridor between the two staves", () => {
+  const grand = systemLayout(STAND);
+  assert.equal(grand.staffTops.length, 2);
+  const gapBetween = grand.staffTops[1] - (grand.staffTops[0] + 4 * grand.space);
+  assert.ok(gapBetween > 3 * grand.space, "the two staves must not touch");
+});
+
+test("the key-signature gutter is sized by its contents", () => {
+  // A constant wide enough for four sharps would spend a third of a 393 px
+  // screen on a piece in C major.
+  const cMajor = systemLayout(PHONE);
+  const eMajor = systemLayout({ ...PHONE, sharps: 4 });
+  assert.ok(eMajor.gutter > cMajor.gutter, "four sharps need more room than none");
+  assert.ok(cMajor.gutter < 0.25 * PHONE.width, "C major must not eat the screen");
+});
+
+test("a crowded key signature is squeezed to the cap the library can actually reach", () => {
+  // Four sharps is the worst case in the repertoire (the Moonlight), and there
+  // the squeeze holds the gutter to exactly the 34% budget.
+  const four = systemLayout({ ...PHONE, sharps: 4 });
+  assert.ok(four.gutter <= 0.34 * PHONE.width + 0.5, "four sharps fit the budget");
+  assert.ok(four.accStep < 0.85 * four.space, "and they were squeezed to do it");
+});
+
+test("the squeeze stops at legibility, and says so rather than pretending", () => {
+  // Seven sharps cannot fit the 34% budget without accidentals narrower than
+  // half a staff space, which is unreadable on a phone. The floor wins, and the
+  // gutter is allowed past the target — a deliberate trade, not an oversight,
+  // and worth pinning down so nobody "fixes" the cap and gets mush instead.
+  const seven = systemLayout({ ...PHONE, sharps: 7 });
+  assert.ok(seven.gutter > 0.34 * PHONE.width, "the budget is exceeded");
+  assert.ok(seven.accStep >= 0.52 * seven.space, "because legibility is the floor");
+  // It must still leave the music most of the screen, and the playhead past the clef.
+  assert.ok(seven.gutter < 0.45 * PHONE.width);
+  assert.ok(seven.playX > seven.gutter, "the playhead stays past the clef");
+});
+
+test("the horizontal scale comes from the shortest note, so heads cannot overlap", () => {
+  // A head is 1.32 staff spaces wide; a semiquaver passage (minGap 0.25) must
+  // still leave daylight between consecutive heads.
+  const dense = systemLayout({ ...PHONE, minGap: 0.25 });
+  assert.ok(dense.pxPerBeat * 0.25 > 1.32 * dense.space, "semiquavers must not collide");
+  // And a piece of crotchets is not stretched to absurdity by the same rule.
+  const sparse = systemLayout({ ...PHONE, minGap: 4 });
+  assert.ok(sparse.pxPerBeat >= 46 && sparse.pxPerBeat <= 200);
+});
+
+test("the playhead leaves room for what was just played", () => {
+  const phone = systemLayout(PHONE);
+  assert.ok(phone.playX > phone.gutter, "never behind the clef");
+  assert.ok(phone.playX < PHONE.width / 2, "and never past the middle of a phone");
 });

@@ -5,13 +5,7 @@
  * on parse quality. This is Phase 1 of the piano-tutor pipeline: everything
  * downstream (render, playback, score following) is meant to consume `Score`.
  */
-export type {
-  Hand,
-  NoteEvent,
-  Score,
-  TempoMark,
-  TimeSignature,
-} from "./model.js";
+export type { Hand, KeySignature, NoteEvent, Score, TempoMark, TimeSignature } from "./model.js";
 export { parseMusicXML } from "./parser.js";
 export {
   formatReport,

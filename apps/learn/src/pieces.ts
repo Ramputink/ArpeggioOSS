@@ -16,6 +16,7 @@ import {
   type HandChoice,
   type Level,
   type Song,
+  type StartPosition,
 } from "@arpeggio/song-library";
 
 export interface Piece {
@@ -30,6 +31,8 @@ export interface Piece {
   sharps: number;
   pickupBeats: number;
   tip: string;
+  /** Where each hand starts, when the piece keeps a settled position. */
+  startPosition?: StartPosition;
   hasLeft: boolean;
   imported: boolean;
   /** Bars in the piece, for the setup sheet. */
@@ -52,6 +55,7 @@ export function pieceFromSong(song: Song): Piece {
     sharps: song.sharps,
     pickupBeats: song.pickupBeats ?? 0,
     tip: song.tip,
+    startPosition: song.startPosition,
     hasLeft: Boolean(song.left),
     imported: false,
     bars: Math.max(1, Math.ceil((lastBeat(full) - (song.pickupBeats ?? 0)) / perBar)),
@@ -77,10 +81,11 @@ export function pieceFromMusicXML(id: string, name: string, xml: string): Piece 
     bpm: Math.round(score.tempos[0]?.bpm ?? 90),
     beats: time.beats,
     beatType: time.beatType,
-    // The canonical model carries no key signature, so accidentals print
-    // explicitly on every note. Musically correct, just busier than an engraved
-    // edition — and better than guessing a key and spelling notes wrongly.
-    sharps: 0,
+    // Taken from `<key><fifths>` when the file has one. A score with no key
+    // element really is C major / A minor as far as we can tell, and printing
+    // every accidental explicitly is the honest fallback — better than guessing
+    // a key and spelling notes wrongly.
+    sharps: score.keySignatures[0]?.fifths ?? 0,
     pickupBeats: detectPickup(score, perBar),
     tip: "Partitura importada por ti. Empieza despacio y con una sola mano.",
     hasLeft,
@@ -163,10 +168,7 @@ export function addImported(name: string, xml: string): ImportedRecord {
 
 export function removeImported(id: string): void {
   try {
-    localStorage.setItem(
-      IMPORTED_KEY,
-      JSON.stringify(loadImported().filter((r) => r.id !== id)),
-    );
+    localStorage.setItem(IMPORTED_KEY, JSON.stringify(loadImported().filter((r) => r.id !== id)));
   } catch {
     /* nothing stored */
   }
